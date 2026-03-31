@@ -30,7 +30,7 @@ public class PlaywrightAutoHeal {
         this.config = config;
         AIProvider aiProvider = AutoHealFactory.createProvider(config);
         this.records = Collections.synchronizedList(new ArrayList<>());
-        HealCache cache = new HealCache(config.isCacheEnabled());
+        HealCache cache = new HealCache(config.isCacheEnabled(), config.getReportPath());
         this.healer = new PlaywrightHealer(page, aiProvider, cache, records);
         this.reportGenerator = new ReportGenerator(config.getReportPath());
         this.sourceFixer = new SourceFixer();

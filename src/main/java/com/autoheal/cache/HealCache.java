@@ -17,9 +17,11 @@ public class HealCache {
     private final ObjectMapper mapper = new ObjectMapper();
     private final boolean enabled;
 
-    public HealCache(boolean enabled) {
+    public HealCache(boolean enabled, String reportPath) {
         this.enabled = enabled;
-        this.cacheFile = new File(CACHE_FILE);
+        File dir = new File(reportPath != null ? reportPath : ".");
+        dir.mkdirs();
+        this.cacheFile = new File(dir, CACHE_FILE);
         this.cache = new ConcurrentHashMap<>();
         if (enabled) {
             load();

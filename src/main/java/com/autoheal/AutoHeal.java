@@ -35,7 +35,7 @@ public class AutoHeal {
     private AutoHeal(AutoHealConfig config, Object playwrightPage, Object seleniumDriver) {
         this.config = config;
         this.aiProvider = createProvider(config);
-        this.cache = new HealCache(config.isCacheEnabled());
+        this.cache = new HealCache(config.isCacheEnabled(), config.getReportPath());
         this.records = Collections.synchronizedList(new ArrayList<>());
         this.reportGenerator = new ReportGenerator(config.getReportPath());
         this.sourceFixer = new SourceFixer();
