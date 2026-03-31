@@ -26,7 +26,7 @@ public class AutoHealConfig {
 
         AutoHealConfig config = new AutoHealConfig();
         config.aiProvider = parseProvider(resolve(dotenv, "AUTOHEAL_AI_PROVIDER", "claude"));
-        config.aiApiKey = resolve(dotenv, "AUTOHEAL_AI_API_KEY", "");
+        config.aiApiKey = resolveApiKey(dotenv, config.aiProvider);
         config.aiModel = resolve(dotenv, "AUTOHEAL_AI_MODEL", defaultModel(config.aiProvider));
         config.reportPath = resolve(dotenv, "AUTOHEAL_REPORT_PATH", "./autoheal-reports/");
         config.autoFix = parseAutoFix(resolve(dotenv, "AUTOHEAL_AUTOFIX", "off"));
@@ -44,10 +44,33 @@ public class AutoHealConfig {
         return defaultValue;
     }
 
+    private static String resolveApiKey(Dotenv dotenv, AiProvider provider) {
+        // Try generic key first
+        String key = resolve(dotenv, "AUTOHEAL_AI_API_KEY", "");
+        if (!key.isEmpty()) return key;
+
+        // Fall back to provider-specific keys
+        switch (provider) {
+            case CLAUDE:
+                key = resolve(dotenv, "CLAUDE_API_KEY", "");
+                if (!key.isEmpty()) return key;
+                return resolve(dotenv, "ANTHROPIC_API_KEY", "");
+            case OPENAI:
+                return resolve(dotenv, "OPENAI_API_KEY", "");
+            case GEMINI:
+                key = resolve(dotenv, "GEMINI_API_KEY", "");
+                if (!key.isEmpty()) return key;
+                return resolve(dotenv, "GOOGLE_API_KEY", "");
+            default:
+                return "";
+        }
+    }
+
     private static AiProvider parseProvider(String value) {
         switch (value.toLowerCase()) {
             case "gemini": return AiProvider.GEMINI;
-            case "openai": return AiProvider.OPENAI;
+            case "openai": case "chatgpt": return AiProvider.OPENAI;
+            case "anthropic": case "claude": return AiProvider.CLAUDE;
             default: return AiProvider.CLAUDE;
         }
     }
