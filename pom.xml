@@ -6,7 +6,7 @@
 
     <groupId>com.autoheal</groupId>
     <artifactId>auto-heal</artifactId>
-    <version>1.0.3</version>
+    <version>1.0.4</version>
     <packaging>jar</packaging>
 
     <name>Auto-Heal</name>
@@ -18,7 +18,6 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <playwright.version>1.49.0</playwright.version>
         <selenium.version>4.27.0</selenium.version>
-        <okhttp.version>4.12.0</okhttp.version>
         <jackson.version>2.18.2</jackson.version>
     </properties>
 
@@ -37,13 +36,6 @@
             <artifactId>selenium-java</artifactId>
             <version>${selenium.version}</version>
             <scope>provided</scope>
-        </dependency>
-
-        <!-- OkHttp for AI API calls -->
-        <dependency>
-            <groupId>com.squareup.okhttp3</groupId>
-            <artifactId>okhttp</artifactId>
-            <version>${okhttp.version}</version>
         </dependency>
 
         <!-- Jackson for JSON -->

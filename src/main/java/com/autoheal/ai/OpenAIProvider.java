@@ -4,27 +4,28 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import okhttp3.*;
 
 import java.io.IOException;
-import java.util.concurrent.TimeUnit;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
 
 public class OpenAIProvider implements AIProvider {
 
     private static final String API_URL = "https://api.openai.com/v1/chat/completions";
-    private static final MediaType JSON = MediaType.get("application/json");
 
     private final String apiKey;
     private final String model;
     private final ObjectMapper mapper = new ObjectMapper();
-    private final OkHttpClient client;
+    private final HttpClient client;
 
     public OpenAIProvider(String apiKey, String model) {
         this.apiKey = apiKey;
         this.model = model;
-        this.client = new OkHttpClient.Builder()
-                .connectTimeout(30, TimeUnit.SECONDS)
-                .readTimeout(60, TimeUnit.SECONDS)
+        this.client = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(30))
                 .build();
     }
 
@@ -44,26 +45,26 @@ public class OpenAIProvider implements AIProvider {
             userMsg.put("role", "user");
             userMsg.put("content", prompt);
 
-            Request request = new Request.Builder()
-                    .url(API_URL)
-                    .addHeader("Authorization", "Bearer " + apiKey)
-                    .addHeader("Content-Type", "application/json")
-                    .post(RequestBody.create(mapper.writeValueAsString(body), JSON))
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(API_URL))
+                    .header("Authorization", "Bearer " + apiKey)
+                    .header("Content-Type", "application/json")
+                    .timeout(Duration.ofSeconds(60))
+                    .POST(HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(body)))
                     .build();
 
-            try (Response response = client.newCall(request).execute()) {
-                if (!response.isSuccessful()) {
-                    String errorBody = response.body() != null ? response.body().string() : "unknown error";
-                    throw new IOException("OpenAI API error " + response.code() + ": " + errorBody);
-                }
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
 
-                JsonNode root = mapper.readTree(response.body().string());
-                String text = root.path("choices").get(0).path("message").path("content").asText();
-                int totalTokens = root.path("usage").path("total_tokens").asInt(0);
-
-                return parseResponse(text, totalTokens);
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                throw new IOException("OpenAI API error " + response.statusCode() + ": " + response.body());
             }
-        } catch (IOException e) {
+
+            JsonNode root = mapper.readTree(response.body());
+            String text = root.path("choices").get(0).path("message").path("content").asText();
+            int totalTokens = root.path("usage").path("total_tokens").asInt(0);
+
+            return parseResponse(text, totalTokens);
+        } catch (IOException | InterruptedException e) {
             throw new RuntimeException("Failed to call OpenAI API: " + e.getMessage(), e);
         }
     }
