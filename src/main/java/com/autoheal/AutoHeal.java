@@ -3,21 +3,23 @@ package com.autoheal;
 import com.autoheal.ai.*;
 import com.autoheal.cache.HealCache;
 import com.autoheal.config.AutoHealConfig;
-import com.autoheal.finder.PlaywrightHealer;
-import com.autoheal.finder.SeleniumHealer;
 import com.autoheal.fixer.SourceFixer;
 import com.autoheal.reporter.HealRecord;
 import com.autoheal.reporter.ReportGenerator;
-import com.microsoft.playwright.Locator;
-import com.microsoft.playwright.Page;
-import org.openqa.selenium.By;
-import org.openqa.selenium.WebDriver;
-import org.openqa.selenium.WebElement;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+/**
+ * Main entry point for auto-healing locators.
+ * Supports Playwright and Selenium independently — consumers only need
+ * the framework they actually use on the classpath.
+ *
+ * All Playwright/Selenium types are referenced only via fully-qualified names
+ * and only in methods specific to that framework, so the JVM only loads them
+ * when those methods are actually called.
+ */
 public class AutoHeal {
 
     private final AutoHealConfig config;
@@ -27,13 +29,10 @@ public class AutoHeal {
     private final ReportGenerator reportGenerator;
     private final SourceFixer sourceFixer;
 
-    // Playwright
-    private PlaywrightHealer playwrightHealer;
+    private Object playwrightHealer;
+    private Object seleniumHealer;
 
-    // Selenium
-    private SeleniumHealer seleniumHealer;
-
-    private AutoHeal(AutoHealConfig config, Page playwrightPage, WebDriver seleniumDriver) {
+    private AutoHeal(AutoHealConfig config, Object playwrightPage, Object seleniumDriver) {
         this.config = config;
         this.aiProvider = createProvider(config);
         this.cache = new HealCache(config.isCacheEnabled());
@@ -42,35 +41,47 @@ public class AutoHeal {
         this.sourceFixer = new SourceFixer();
 
         if (playwrightPage != null) {
-            this.playwrightHealer = new PlaywrightHealer(playwrightPage, aiProvider, cache, records);
+            initPlaywright(playwrightPage);
         }
         if (seleniumDriver != null) {
-            this.seleniumHealer = new SeleniumHealer(seleniumDriver, aiProvider, cache, records);
+            initSelenium(seleniumDriver);
         }
+    }
+
+    private void initPlaywright(Object page) {
+        this.playwrightHealer = new com.autoheal.finder.PlaywrightHealer(
+                (com.microsoft.playwright.Page) page, aiProvider, cache, records);
+    }
+
+    private void initSelenium(Object driver) {
+        this.seleniumHealer = new com.autoheal.finder.SeleniumHealer(
+                (org.openqa.selenium.WebDriver) driver, aiProvider, cache, records);
     }
 
     // --- Playwright methods ---
 
-    public Locator find(Locator original, String description) {
+    public com.microsoft.playwright.Locator find(com.microsoft.playwright.Locator original, String description) {
         requirePlaywright();
-        return playwrightHealer.find(original, description);
+        return ((com.autoheal.finder.PlaywrightHealer) playwrightHealer).find(original, description);
     }
 
-    public Locator find(Locator original, String description, String sourceFile, int sourceLine) {
+    public com.microsoft.playwright.Locator find(com.microsoft.playwright.Locator original, String description,
+                                                  String sourceFile, int sourceLine) {
         requirePlaywright();
-        return playwrightHealer.find(original, description, sourceFile, sourceLine);
+        return ((com.autoheal.finder.PlaywrightHealer) playwrightHealer).find(original, description, sourceFile, sourceLine);
     }
 
     // --- Selenium methods ---
 
-    public WebElement find(By original, String description) {
+    public org.openqa.selenium.WebElement find(org.openqa.selenium.By original, String description) {
         requireSelenium();
-        return seleniumHealer.find(original, description);
+        return ((com.autoheal.finder.SeleniumHealer) seleniumHealer).find(original, description);
     }
 
-    public WebElement find(By original, String description, String sourceFile, int sourceLine) {
+    public org.openqa.selenium.WebElement find(org.openqa.selenium.By original, String description,
+                                                String sourceFile, int sourceLine) {
         requireSelenium();
-        return seleniumHealer.find(original, description, sourceFile, sourceLine);
+        return ((com.autoheal.finder.SeleniumHealer) seleniumHealer).find(original, description, sourceFile, sourceLine);
     }
 
     // --- Report & Fix ---
@@ -134,22 +145,35 @@ public class AutoHeal {
         return new Builder();
     }
 
+    /**
+     * Builder accepts Object types so consumers don't need both
+     * Playwright and Selenium on their classpath.
+     * Type checking is deferred to build() / runtime.
+     */
     public static class Builder {
         private AutoHealConfig config;
-        private Page playwrightPage;
-        private WebDriver seleniumDriver;
+        private Object playwrightPage;
+        private Object seleniumDriver;
 
         public Builder config(AutoHealConfig config) {
             this.config = config;
             return this;
         }
 
-        public Builder playwrightPage(Page page) {
+        /**
+         * Set the Playwright Page instance.
+         * Accepts Object to avoid compile-time dependency on Playwright.
+         */
+        public Builder playwrightPage(Object page) {
             this.playwrightPage = page;
             return this;
         }
 
-        public Builder seleniumDriver(WebDriver driver) {
+        /**
+         * Set the Selenium WebDriver instance.
+         * Accepts Object to avoid compile-time dependency on Selenium.
+         */
+        public Builder seleniumDriver(Object driver) {
             this.seleniumDriver = driver;
             return this;
         }
