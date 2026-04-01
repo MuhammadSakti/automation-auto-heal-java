@@ -10,7 +10,7 @@ import com.autoheal.util.LocatorSourceResolver.SourceInfo;
 import com.microsoft.playwright.Locator;
 import com.microsoft.playwright.Page;
 
-import java.util.List;
+import java.util.*;
 
 public class PlaywrightHealer {
 
@@ -21,11 +21,19 @@ public class PlaywrightHealer {
     private String cachedDom;
     private String cachedDomUrl;
 
+    // Pending broken locators for batch healing
+    private final List<PendingHeal> pendingHeals = new ArrayList<>();
+    private boolean batchMode = false;
+
     public PlaywrightHealer(Page page, AIProvider aiProvider, HealCache cache, List<HealRecord> records) {
         this.page = page;
         this.aiProvider = aiProvider;
         this.cache = cache;
         this.records = records;
+    }
+
+    public void setBatchMode(boolean enabled) {
+        this.batchMode = enabled;
     }
 
     public Locator find(Locator original, String description) {
@@ -71,7 +79,78 @@ public class PlaywrightHealer {
             }
         }
 
-        // 3. DOM Heal via AI (cache DOM per URL)
+        // 3. If batch mode, collect for later
+        if (batchMode) {
+            pendingHeals.add(new PendingHeal(original, originalSelector, description, sourceFile, sourceLine, start));
+            return original; // return original as placeholder
+        }
+
+        // 4. Single DOM Heal via AI
+        return healSingle(original, originalSelector, description, sourceFile, sourceLine, start);
+    }
+
+    /**
+     * Flush all pending broken locators in one batch AI call.
+     * Returns map of original selector -> healed Locator.
+     */
+    public Map<String, Locator> flushBatch() {
+        Map<String, Locator> results = new LinkedHashMap<>();
+        if (pendingHeals.isEmpty()) return results;
+
+        // Extract DOM once
+        String currentUrl = page.url();
+        if (cachedDom == null || !currentUrl.equals(cachedDomUrl)) {
+            cachedDom = DomExtractor.fromPlaywright(page);
+            cachedDomUrl = currentUrl;
+        }
+
+        // Build batch request: originalSelector -> description
+        Map<String, String> locatorMap = new LinkedHashMap<>();
+        for (PendingHeal p : pendingHeals) {
+            locatorMap.put(p.originalSelector, p.description);
+        }
+
+        // One AI call for all broken locators
+        Map<String, AIResponse> batchResults = aiProvider.findLocatorsBatch(cachedDom, locatorMap);
+
+        // Process results
+        for (PendingHeal p : pendingHeals) {
+            AIResponse aiResponse = batchResults.get(p.originalSelector);
+            if (aiResponse == null) {
+                long elapsed = System.currentTimeMillis() - p.startTime;
+                records.add(HealRecord.failed(p.originalSelector, "",
+                        elapsed, 0, "Not found in batch response",
+                        p.sourceFile, p.sourceLine));
+                continue;
+            }
+
+            String newSelector = aiResponse.getSelector();
+            try {
+                Locator healed = page.locator(newSelector);
+                if (healed.count() > 0) {
+                    long elapsed = System.currentTimeMillis() - p.startTime;
+                    cache.put(p.originalSelector, newSelector);
+                    records.add(HealRecord.success(p.originalSelector, newSelector,
+                            HealResult.Strategy.DOM_HEALED, elapsed, aiResponse.getTokensUsed(),
+                            aiResponse.getReasoning(), p.sourceFile, p.sourceLine, extractElementInfo(healed)));
+                    results.put(p.originalSelector, healed);
+                    continue;
+                }
+            } catch (Exception ignored) {
+            }
+
+            long elapsed = System.currentTimeMillis() - p.startTime;
+            records.add(HealRecord.failed(p.originalSelector, newSelector,
+                    elapsed, aiResponse.getTokensUsed(), aiResponse.getReasoning(),
+                    p.sourceFile, p.sourceLine));
+        }
+
+        pendingHeals.clear();
+        return results;
+    }
+
+    private Locator healSingle(Locator original, String originalSelector, String description,
+                                String sourceFile, int sourceLine, long start) {
         String currentUrl = page.url();
         if (cachedDom == null || !currentUrl.equals(cachedDomUrl)) {
             cachedDom = DomExtractor.fromPlaywright(page);
@@ -94,7 +173,6 @@ public class PlaywrightHealer {
         } catch (Exception ignored) {
         }
 
-        // All strategies failed
         long elapsed = System.currentTimeMillis() - start;
         records.add(HealRecord.failed(originalSelector, newSelector,
                 elapsed, aiResponse.getTokensUsed(), aiResponse.getReasoning(),
@@ -117,6 +195,25 @@ public class PlaywrightHealer {
             );
         } catch (Exception e) {
             return "{}";
+        }
+    }
+
+    private static class PendingHeal {
+        final Locator original;
+        final String originalSelector;
+        final String description;
+        final String sourceFile;
+        final int sourceLine;
+        final long startTime;
+
+        PendingHeal(Locator original, String originalSelector, String description,
+                    String sourceFile, int sourceLine, long startTime) {
+            this.original = original;
+            this.originalSelector = originalSelector;
+            this.description = description;
+            this.sourceFile = sourceFile;
+            this.sourceLine = sourceLine;
+            this.startTime = startTime;
         }
     }
 }

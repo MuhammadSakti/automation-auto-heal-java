@@ -11,6 +11,8 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 public class OpenAIProvider implements AIProvider {
 
@@ -66,6 +68,74 @@ public class OpenAIProvider implements AIProvider {
             return parseResponse(text, totalTokens);
         } catch (IOException | InterruptedException e) {
             throw new RuntimeException("Failed to call OpenAI API: " + e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public Map<String, AIResponse> findLocatorsBatch(String domSnapshot, Map<String, String> locators) {
+        try {
+            StringBuilder sb = new StringBuilder();
+            sb.append("Multiple UI locators have broken and need to be healed.\n\n");
+            sb.append("Current page DOM:\n```html\n").append(domSnapshot).append("\n```\n\n");
+            sb.append("Broken locators:\n");
+            int i = 1;
+            for (Map.Entry<String, String> entry : locators.entrySet()) {
+                sb.append(i++).append(". Original: ").append(entry.getKey())
+                  .append(" | Description: ").append(entry.getValue()).append("\n");
+            }
+            sb.append("\nFor each locator, find the best CSS or XPath selector.\n");
+            sb.append("Respond in this exact format for each (no markdown, no extra text):\n");
+            sb.append("ORIGINAL: <original selector>\nSELECTOR: <new selector>\nREASONING: <brief explanation>\n\n");
+
+            ObjectNode body = mapper.createObjectNode();
+            body.put("model", model);
+            body.put("max_tokens", 4096);
+            ArrayNode messages = body.putArray("messages");
+            ObjectNode sysMsg = messages.addObject();
+            sysMsg.put("role", "system");
+            sysMsg.put("content", "You are a test automation expert that heals broken UI locators.");
+            ObjectNode userMsg = messages.addObject();
+            userMsg.put("role", "user");
+            userMsg.put("content", sb.toString());
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(API_URL))
+                    .header("Authorization", "Bearer " + apiKey)
+                    .header("Content-Type", "application/json")
+                    .timeout(Duration.ofSeconds(120))
+                    .POST(HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(body)))
+                    .build();
+
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                throw new IOException("OpenAI API error " + response.statusCode() + ": " + response.body());
+            }
+
+            JsonNode root = mapper.readTree(response.body());
+            String text = root.path("choices").get(0).path("message").path("content").asText();
+            int totalTokens = root.path("usage").path("total_tokens").asInt(0);
+            int tokensPerLocator = totalTokens / Math.max(locators.size(), 1);
+
+            Map<String, AIResponse> results = new LinkedHashMap<>();
+            String currentOriginal = null, currentSelector = null, currentReasoning = null;
+            for (String line : text.split("\n")) {
+                line = line.trim();
+                if (line.startsWith("ORIGINAL:")) {
+                    if (currentOriginal != null && currentSelector != null)
+                        results.put(currentOriginal, new AIResponse(currentSelector, currentReasoning != null ? currentReasoning : "", tokensPerLocator));
+                    currentOriginal = line.substring("ORIGINAL:".length()).trim();
+                    currentSelector = null; currentReasoning = null;
+                } else if (line.startsWith("SELECTOR:")) {
+                    currentSelector = line.substring("SELECTOR:".length()).trim();
+                } else if (line.startsWith("REASONING:")) {
+                    currentReasoning = line.substring("REASONING:".length()).trim();
+                }
+            }
+            if (currentOriginal != null && currentSelector != null)
+                results.put(currentOriginal, new AIResponse(currentSelector, currentReasoning != null ? currentReasoning : "", tokensPerLocator));
+            return results;
+        } catch (IOException | InterruptedException e) {
+            throw new RuntimeException("Failed to call OpenAI API (batch): " + e.getMessage(), e);
         }
     }
 

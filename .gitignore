@@ -10,3 +10,4 @@ target/
 .env
 .autoheal-cache.json
 autoheal-reports/
+CLAUDE.md

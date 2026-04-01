@@ -10,9 +10,7 @@ import com.autoheal.reporter.ReportGenerator;
 import com.microsoft.playwright.Locator;
 import com.microsoft.playwright.Page;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 
 /**
  * AutoHeal entry point for Playwright-only projects.
@@ -46,6 +44,23 @@ public class PlaywrightAutoHeal {
 
     public Locator find(Locator original, String description, String sourceFile, int sourceLine) {
         return healer.find(original, description, sourceFile, sourceLine);
+    }
+
+    /**
+     * Enable batch mode: broken locators are collected instead of healed immediately.
+     * Call flushBatch() to heal all collected locators in one AI call.
+     */
+    public void startBatch() {
+        healer.setBatchMode(true);
+    }
+
+    /**
+     * Heal all collected broken locators in one AI call.
+     * Returns map of original selector -> healed Locator.
+     */
+    public Map<String, Locator> flushBatch() {
+        healer.setBatchMode(false);
+        return healer.flushBatch();
     }
 
     public void generateReport() {

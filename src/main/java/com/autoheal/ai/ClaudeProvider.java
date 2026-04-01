@@ -11,6 +11,8 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 public class ClaudeProvider implements AIProvider {
 
@@ -66,6 +68,92 @@ public class ClaudeProvider implements AIProvider {
         } catch (IOException | InterruptedException e) {
             throw new RuntimeException("Failed to call Claude API: " + e.getMessage(), e);
         }
+    }
+
+    @Override
+    public Map<String, AIResponse> findLocatorsBatch(String domSnapshot, Map<String, String> locators) {
+        try {
+            String prompt = buildBatchPrompt(domSnapshot, locators);
+
+            ObjectNode body = mapper.createObjectNode();
+            body.put("model", model);
+            body.put("max_tokens", 4096);
+            ArrayNode messages = body.putArray("messages");
+            ObjectNode msg = messages.addObject();
+            msg.put("role", "user");
+            msg.put("content", prompt);
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(API_URL))
+                    .header("x-api-key", apiKey)
+                    .header("anthropic-version", "2023-06-01")
+                    .header("content-type", "application/json")
+                    .timeout(Duration.ofSeconds(120))
+                    .POST(HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(body)))
+                    .build();
+
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                throw new IOException("Claude API error " + response.statusCode() + ": " + response.body());
+            }
+
+            JsonNode root = mapper.readTree(response.body());
+            String text = root.path("content").get(0).path("text").asText();
+            int inputTokens = root.path("usage").path("input_tokens").asInt(0);
+            int outputTokens = root.path("usage").path("output_tokens").asInt(0);
+            int totalTokens = inputTokens + outputTokens;
+
+            return parseBatchResponse(text, totalTokens, locators.size());
+        } catch (IOException | InterruptedException e) {
+            throw new RuntimeException("Failed to call Claude API (batch): " + e.getMessage(), e);
+        }
+    }
+
+    private String buildBatchPrompt(String domSnapshot, Map<String, String> locators) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("You are a test automation expert. Multiple UI locators have broken and need to be healed.\n\n");
+        sb.append("Current page DOM:\n```html\n").append(domSnapshot).append("\n```\n\n");
+        sb.append("Broken locators:\n");
+        int i = 1;
+        for (Map.Entry<String, String> entry : locators.entrySet()) {
+            sb.append(i++).append(". Original: ").append(entry.getKey())
+              .append(" | Description: ").append(entry.getValue()).append("\n");
+        }
+        sb.append("\nFor each locator, find the best CSS or XPath selector.\n");
+        sb.append("Respond in this exact format for each (no markdown, no extra text):\n");
+        sb.append("ORIGINAL: <original selector>\nSELECTOR: <new selector>\nREASONING: <brief explanation>\n\n");
+        return sb.toString();
+    }
+
+    private Map<String, AIResponse> parseBatchResponse(String text, int totalTokens, int count) {
+        Map<String, AIResponse> results = new LinkedHashMap<>();
+        int tokensPerLocator = totalTokens / Math.max(count, 1);
+
+        String currentOriginal = null;
+        String currentSelector = null;
+        String currentReasoning = null;
+
+        for (String line : text.split("\n")) {
+            line = line.trim();
+            if (line.startsWith("ORIGINAL:")) {
+                if (currentOriginal != null && currentSelector != null) {
+                    results.put(currentOriginal, new AIResponse(currentSelector, currentReasoning != null ? currentReasoning : "", tokensPerLocator));
+                }
+                currentOriginal = line.substring("ORIGINAL:".length()).trim();
+                currentSelector = null;
+                currentReasoning = null;
+            } else if (line.startsWith("SELECTOR:")) {
+                currentSelector = line.substring("SELECTOR:".length()).trim();
+            } else if (line.startsWith("REASONING:")) {
+                currentReasoning = line.substring("REASONING:".length()).trim();
+            }
+        }
+        if (currentOriginal != null && currentSelector != null) {
+            results.put(currentOriginal, new AIResponse(currentSelector, currentReasoning != null ? currentReasoning : "", tokensPerLocator));
+        }
+
+        return results;
     }
 
     private String buildPrompt(String domSnapshot, String description, String originalSelector) {
