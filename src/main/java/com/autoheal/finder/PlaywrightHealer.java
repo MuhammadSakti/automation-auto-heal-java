@@ -18,6 +18,8 @@ public class PlaywrightHealer {
     private final AIProvider aiProvider;
     private final HealCache cache;
     private final List<HealRecord> records;
+    private String cachedDom;
+    private String cachedDomUrl;
 
     public PlaywrightHealer(Page page, AIProvider aiProvider, HealCache cache, List<HealRecord> records) {
         this.page = page;
@@ -69,8 +71,13 @@ public class PlaywrightHealer {
             }
         }
 
-        // 3. DOM Heal via AI
-        String dom = DomExtractor.fromPlaywright(page);
+        // 3. DOM Heal via AI (cache DOM per URL)
+        String currentUrl = page.url();
+        if (cachedDom == null || !currentUrl.equals(cachedDomUrl)) {
+            cachedDom = DomExtractor.fromPlaywright(page);
+            cachedDomUrl = currentUrl;
+        }
+        String dom = cachedDom;
         AIResponse aiResponse = aiProvider.findLocator(dom, description, originalSelector);
         String newSelector = aiResponse.getSelector();
 

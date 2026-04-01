@@ -20,6 +20,8 @@ public class SeleniumHealer {
     private final AIProvider aiProvider;
     private final HealCache cache;
     private final List<HealRecord> records;
+    private String cachedDom;
+    private String cachedDomUrl;
 
     public SeleniumHealer(WebDriver driver, AIProvider aiProvider, HealCache cache, List<HealRecord> records) {
         this.driver = driver;
@@ -73,8 +75,13 @@ public class SeleniumHealer {
             }
         }
 
-        // 3. DOM Heal via AI
-        String dom = DomExtractor.fromSelenium(driver);
+        // 3. DOM Heal via AI (cache DOM per URL)
+        String currentUrl = driver.getCurrentUrl();
+        if (cachedDom == null || !currentUrl.equals(cachedDomUrl)) {
+            cachedDom = DomExtractor.fromSelenium(driver);
+            cachedDomUrl = currentUrl;
+        }
+        String dom = cachedDom;
         AIResponse aiResponse = aiProvider.findLocator(dom, description, originalSelector);
         String newSelector = aiResponse.getSelector();
 
