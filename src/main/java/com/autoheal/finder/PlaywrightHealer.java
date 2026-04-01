@@ -32,6 +32,11 @@ public class PlaywrightHealer {
         this.records = records;
     }
 
+    public void captureDom() {
+        cachedDom = DomExtractor.fromPlaywright(page);
+        cachedDomUrl = page.url();
+    }
+
     public void setBatchMode(boolean enabled) {
         this.batchMode = enabled;
     }

@@ -47,6 +47,14 @@ public class PlaywrightAutoHeal {
     }
 
     /**
+     * Capture the current page DOM now.
+     * Call after navigation so the DOM is ready before heal calls.
+     */
+    public void captureDom() {
+        healer.captureDom();
+    }
+
+    /**
      * Enable batch mode: broken locators are collected instead of healed immediately.
      * Call flushBatch() to heal all collected locators in one AI call.
      */
