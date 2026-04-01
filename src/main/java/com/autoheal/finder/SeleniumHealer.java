@@ -5,6 +5,8 @@ import com.autoheal.ai.AIResponse;
 import com.autoheal.cache.HealCache;
 import com.autoheal.reporter.HealRecord;
 import com.autoheal.util.DomExtractor;
+import com.autoheal.util.LocatorSourceResolver;
+import com.autoheal.util.LocatorSourceResolver.SourceInfo;
 import org.openqa.selenium.By;
 import org.openqa.selenium.JavascriptExecutor;
 import org.openqa.selenium.WebDriver;
@@ -28,6 +30,13 @@ public class SeleniumHealer {
 
     public WebElement find(By original, String description) {
         return find(original, description, null, -1);
+    }
+
+    public WebElement find(By original, String description, Object pageObject) {
+        SourceInfo info = LocatorSourceResolver.resolve(original, pageObject);
+        String sourceFile = info != null ? info.filePath() : null;
+        int sourceLine = info != null ? info.lineNumber() : -1;
+        return find(original, description, sourceFile, sourceLine);
     }
 
     public WebElement find(By original, String description, String sourceFile, int sourceLine) {

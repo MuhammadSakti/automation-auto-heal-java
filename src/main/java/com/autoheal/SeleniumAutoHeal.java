@@ -41,6 +41,10 @@ public class SeleniumAutoHeal {
         return healer.find(original, description);
     }
 
+    public WebElement find(By original, String description, Object pageObject) {
+        return healer.find(original, description, pageObject);
+    }
+
     public WebElement find(By original, String description, String sourceFile, int sourceLine) {
         return healer.find(original, description, sourceFile, sourceLine);
     }

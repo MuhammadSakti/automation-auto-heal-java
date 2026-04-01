@@ -66,6 +66,12 @@ public class AutoHeal {
     }
 
     public com.microsoft.playwright.Locator find(com.microsoft.playwright.Locator original, String description,
+                                                  Object pageObject) {
+        requirePlaywright();
+        return ((com.autoheal.finder.PlaywrightHealer) playwrightHealer).find(original, description, pageObject);
+    }
+
+    public com.microsoft.playwright.Locator find(com.microsoft.playwright.Locator original, String description,
                                                   String sourceFile, int sourceLine) {
         requirePlaywright();
         return ((com.autoheal.finder.PlaywrightHealer) playwrightHealer).find(original, description, sourceFile, sourceLine);
@@ -76,6 +82,12 @@ public class AutoHeal {
     public org.openqa.selenium.WebElement find(org.openqa.selenium.By original, String description) {
         requireSelenium();
         return ((com.autoheal.finder.SeleniumHealer) seleniumHealer).find(original, description);
+    }
+
+    public org.openqa.selenium.WebElement find(org.openqa.selenium.By original, String description,
+                                                Object pageObject) {
+        requireSelenium();
+        return ((com.autoheal.finder.SeleniumHealer) seleniumHealer).find(original, description, pageObject);
     }
 
     public org.openqa.selenium.WebElement find(org.openqa.selenium.By original, String description,

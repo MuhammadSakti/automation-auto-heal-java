@@ -5,6 +5,8 @@ import com.autoheal.ai.AIResponse;
 import com.autoheal.cache.HealCache;
 import com.autoheal.reporter.HealRecord;
 import com.autoheal.util.DomExtractor;
+import com.autoheal.util.LocatorSourceResolver;
+import com.autoheal.util.LocatorSourceResolver.SourceInfo;
 import com.microsoft.playwright.Locator;
 import com.microsoft.playwright.Page;
 
@@ -26,6 +28,13 @@ public class PlaywrightHealer {
 
     public Locator find(Locator original, String description) {
         return find(original, description, null, -1);
+    }
+
+    public Locator find(Locator original, String description, Object pageObject) {
+        SourceInfo info = LocatorSourceResolver.resolve(original, pageObject);
+        String sourceFile = info != null ? info.filePath() : null;
+        int sourceLine = info != null ? info.lineNumber() : -1;
+        return find(original, description, sourceFile, sourceLine);
     }
 
     public Locator find(Locator original, String description, String sourceFile, int sourceLine) {
