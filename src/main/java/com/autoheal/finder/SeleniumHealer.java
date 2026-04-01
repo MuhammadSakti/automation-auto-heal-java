@@ -46,32 +46,25 @@ public class SeleniumHealer {
         String originalSelector = original.toString();
 
         // 1. Try original locator
-        try {
-            List<WebElement> elements = driver.findElements(original);
-            if (!elements.isEmpty() && elements.get(0).isDisplayed()) {
-                long elapsed = System.currentTimeMillis() - start;
-                records.add(HealRecord.success(originalSelector, originalSelector,
-                        HealResult.Strategy.ORIGINAL, elapsed, 0, "Original locator works",
-                        sourceFile, sourceLine, extractElementInfo(elements.get(0))));
-                return elements.get(0);
-            }
-        } catch (Exception ignored) {
+        WebElement found = tryFind(original);
+        if (found != null) {
+            long elapsed = System.currentTimeMillis() - start;
+            records.add(HealRecord.success(originalSelector, originalSelector,
+                    HealResult.Strategy.ORIGINAL, elapsed, 0, "Original locator works",
+                    sourceFile, sourceLine, extractElementInfo(found)));
+            return found;
         }
 
         // 2. Check cache
         String cachedSelector = cache.get(originalSelector);
         if (cachedSelector != null) {
-            try {
-                By cachedBy = toBy(cachedSelector);
-                List<WebElement> elements = driver.findElements(cachedBy);
-                if (!elements.isEmpty() && elements.get(0).isDisplayed()) {
-                    long elapsed = System.currentTimeMillis() - start;
-                    records.add(HealRecord.success(originalSelector, cachedSelector,
-                            HealResult.Strategy.CACHED, elapsed, 0, "Found in cache",
-                            sourceFile, sourceLine, extractElementInfo(elements.get(0))));
-                    return elements.get(0);
-                }
-            } catch (Exception ignored) {
+            WebElement cached = tryFind(toBy(cachedSelector));
+            if (cached != null) {
+                long elapsed = System.currentTimeMillis() - start;
+                records.add(HealRecord.success(originalSelector, cachedSelector,
+                        HealResult.Strategy.CACHED, elapsed, 0, "Found in cache",
+                        sourceFile, sourceLine, extractElementInfo(cached)));
+                return cached;
             }
         }
 
@@ -85,19 +78,15 @@ public class SeleniumHealer {
         AIResponse aiResponse = aiProvider.findLocator(dom, description, originalSelector);
         String newSelector = aiResponse.getSelector();
 
-        try {
-            By newBy = toBy(newSelector);
-            List<WebElement> elements = driver.findElements(newBy);
-            if (!elements.isEmpty()) {
-                long elapsed = System.currentTimeMillis() - start;
-                cache.put(originalSelector, newSelector);
-                records.add(HealRecord.success(originalSelector, newSelector,
-                        HealResult.Strategy.DOM_HEALED, elapsed, aiResponse.getTokensUsed(),
-                        aiResponse.getReasoning(), sourceFile, sourceLine,
-                        extractElementInfo(elements.get(0))));
-                return elements.get(0);
-            }
-        } catch (Exception ignored) {
+        WebElement healed = tryFind(toBy(newSelector));
+        if (healed != null) {
+            long elapsed = System.currentTimeMillis() - start;
+            cache.put(originalSelector, newSelector);
+            records.add(HealRecord.success(originalSelector, newSelector,
+                    HealResult.Strategy.DOM_HEALED, elapsed, aiResponse.getTokensUsed(),
+                    aiResponse.getReasoning(), sourceFile, sourceLine,
+                    extractElementInfo(healed)));
+            return healed;
         }
 
         // All strategies failed
@@ -110,6 +99,14 @@ public class SeleniumHealer {
                 "\nOriginal: " + originalSelector +
                 "\nAI suggested: " + newSelector +
                 "\nReasoning: " + aiResponse.getReasoning());
+    }
+
+    private WebElement tryFind(By by) {
+        try {
+            List<WebElement> elements = driver.findElements(by);
+            if (!elements.isEmpty() && elements.get(0).isDisplayed()) return elements.get(0);
+        } catch (Exception ignored) {}
+        return null;
     }
 
     private By toBy(String selector) {

@@ -57,30 +57,25 @@ public class PlaywrightHealer {
         String originalSelector = original.toString();
 
         // 1. Try original locator
-        try {
-            if (original.count() > 0 && original.first().isVisible()) {
-                long elapsed = System.currentTimeMillis() - start;
-                records.add(HealRecord.success(originalSelector, originalSelector,
-                        HealResult.Strategy.ORIGINAL, elapsed, 0, "Original locator works",
-                        sourceFile, sourceLine, extractElementInfo(original)));
-                return original;
-            }
-        } catch (Exception ignored) {
+        Locator found = tryLocator(original);
+        if (found != null) {
+            long elapsed = System.currentTimeMillis() - start;
+            records.add(HealRecord.success(originalSelector, originalSelector,
+                    HealResult.Strategy.ORIGINAL, elapsed, 0, "Original locator works",
+                    sourceFile, sourceLine, extractElementInfo(found)));
+            return found;
         }
 
         // 2. Check cache
         String cachedSelector = cache.get(originalSelector);
         if (cachedSelector != null) {
-            try {
-                Locator cachedLocator = page.locator(cachedSelector);
-                if (cachedLocator.count() > 0 && cachedLocator.first().isVisible()) {
-                    long elapsed = System.currentTimeMillis() - start;
-                    records.add(HealRecord.success(originalSelector, cachedSelector,
-                            HealResult.Strategy.CACHED, elapsed, 0, "Found in cache",
-                            sourceFile, sourceLine, extractElementInfo(cachedLocator)));
-                    return cachedLocator;
-                }
-            } catch (Exception ignored) {
+            Locator cachedLocator = tryLocator(page.locator(cachedSelector));
+            if (cachedLocator != null) {
+                long elapsed = System.currentTimeMillis() - start;
+                records.add(HealRecord.success(originalSelector, cachedSelector,
+                        HealResult.Strategy.CACHED, elapsed, 0, "Found in cache",
+                        sourceFile, sourceLine, extractElementInfo(cachedLocator)));
+                return cachedLocator;
             }
         }
 
@@ -130,18 +125,15 @@ public class PlaywrightHealer {
             }
 
             String newSelector = aiResponse.getSelector();
-            try {
-                Locator healed = page.locator(newSelector);
-                if (healed.count() > 0) {
-                    long elapsed = System.currentTimeMillis() - p.startTime;
-                    cache.put(p.originalSelector, newSelector);
-                    records.add(HealRecord.success(p.originalSelector, newSelector,
-                            HealResult.Strategy.DOM_HEALED, elapsed, aiResponse.getTokensUsed(),
-                            aiResponse.getReasoning(), p.sourceFile, p.sourceLine, extractElementInfo(healed)));
-                    results.put(p.originalSelector, healed);
-                    continue;
-                }
-            } catch (Exception ignored) {
+            Locator healed = tryLocator(page.locator(newSelector));
+            if (healed != null) {
+                long elapsed = System.currentTimeMillis() - p.startTime;
+                cache.put(p.originalSelector, newSelector);
+                records.add(HealRecord.success(p.originalSelector, newSelector,
+                        HealResult.Strategy.DOM_HEALED, elapsed, aiResponse.getTokensUsed(),
+                        aiResponse.getReasoning(), p.sourceFile, p.sourceLine, extractElementInfo(healed)));
+                results.put(p.originalSelector, healed);
+                continue;
             }
 
             long elapsed = System.currentTimeMillis() - p.startTime;
@@ -165,17 +157,14 @@ public class PlaywrightHealer {
         AIResponse aiResponse = aiProvider.findLocator(dom, description, originalSelector);
         String newSelector = aiResponse.getSelector();
 
-        try {
-            Locator healed = page.locator(newSelector);
-            if (healed.count() > 0) {
-                long elapsed = System.currentTimeMillis() - start;
-                cache.put(originalSelector, newSelector);
-                records.add(HealRecord.success(originalSelector, newSelector,
-                        HealResult.Strategy.DOM_HEALED, elapsed, aiResponse.getTokensUsed(),
-                        aiResponse.getReasoning(), sourceFile, sourceLine, extractElementInfo(healed)));
-                return healed;
-            }
-        } catch (Exception ignored) {
+        Locator healed = tryLocator(page.locator(newSelector));
+        if (healed != null) {
+            long elapsed = System.currentTimeMillis() - start;
+            cache.put(originalSelector, newSelector);
+            records.add(HealRecord.success(originalSelector, newSelector,
+                    HealResult.Strategy.DOM_HEALED, elapsed, aiResponse.getTokensUsed(),
+                    aiResponse.getReasoning(), sourceFile, sourceLine, extractElementInfo(healed)));
+            return healed;
         }
 
         long elapsed = System.currentTimeMillis() - start;
@@ -187,6 +176,13 @@ public class PlaywrightHealer {
                 "\nOriginal: " + originalSelector +
                 "\nAI suggested: " + newSelector +
                 "\nReasoning: " + aiResponse.getReasoning());
+    }
+
+    private Locator tryLocator(Locator locator) {
+        try {
+            if (locator.count() > 0 && locator.first().isVisible()) return locator;
+        } catch (Exception ignored) {}
+        return null;
     }
 
     private String extractElementInfo(Locator locator) {

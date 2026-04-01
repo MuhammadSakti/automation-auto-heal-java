@@ -11,3 +11,4 @@ target/
 .autoheal-cache.json
 autoheal-reports/
 CLAUDE.md
+.claude

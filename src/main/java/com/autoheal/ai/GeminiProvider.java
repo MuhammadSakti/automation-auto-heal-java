@@ -11,7 +11,6 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
-import java.util.LinkedHashMap;
 import java.util.Map;
 
 public class GeminiProvider implements AIProvider {
@@ -72,26 +71,15 @@ public class GeminiProvider implements AIProvider {
     @Override
     public Map<String, AIResponse> findLocatorsBatch(String domSnapshot, Map<String, String> locators) {
         try {
-            StringBuilder sb = new StringBuilder();
-            sb.append("You are a test automation expert. Multiple UI locators have broken and need to be healed.\n\n");
-            sb.append("Current page DOM:\n```html\n").append(domSnapshot).append("\n```\n\n");
-            sb.append("Broken locators:\n");
-            int i = 1;
-            for (Map.Entry<String, String> entry : locators.entrySet()) {
-                sb.append(i++).append(". Original: ").append(entry.getKey())
-                  .append(" | Description: ").append(entry.getValue()).append("\n");
-            }
-            sb.append("\nFor each locator, find the best CSS or XPath selector.\n");
-            sb.append("Respond in this exact format for each (no markdown, no extra text):\n");
-            sb.append("ORIGINAL: <original selector>\nSELECTOR: <new selector>\nREASONING: <brief explanation>\n\n");
-
+            String prompt = buildBatchPrompt(domSnapshot, locators);
             String url = String.format(API_URL, model, apiKey);
+
             ObjectNode body = mapper.createObjectNode();
             ArrayNode contents = body.putArray("contents");
             ObjectNode content = contents.addObject();
             ArrayNode parts = content.putArray("parts");
             ObjectNode part = parts.addObject();
-            part.put("text", sb.toString());
+            part.put("text", prompt);
 
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(url))
@@ -108,29 +96,27 @@ public class GeminiProvider implements AIProvider {
             JsonNode root = mapper.readTree(response.body());
             String text = root.path("candidates").get(0).path("content").path("parts").get(0).path("text").asText();
             int totalTokens = root.path("usageMetadata").path("totalTokenCount").asInt(0);
-            int tokensPerLocator = totalTokens / Math.max(locators.size(), 1);
 
-            Map<String, AIResponse> results = new LinkedHashMap<>();
-            String currentOriginal = null, currentSelector = null, currentReasoning = null;
-            for (String line : text.split("\n")) {
-                line = line.trim();
-                if (line.startsWith("ORIGINAL:")) {
-                    if (currentOriginal != null && currentSelector != null)
-                        results.put(currentOriginal, new AIResponse(currentSelector, currentReasoning != null ? currentReasoning : "", tokensPerLocator));
-                    currentOriginal = line.substring("ORIGINAL:".length()).trim();
-                    currentSelector = null; currentReasoning = null;
-                } else if (line.startsWith("SELECTOR:")) {
-                    currentSelector = line.substring("SELECTOR:".length()).trim();
-                } else if (line.startsWith("REASONING:")) {
-                    currentReasoning = line.substring("REASONING:".length()).trim();
-                }
-            }
-            if (currentOriginal != null && currentSelector != null)
-                results.put(currentOriginal, new AIResponse(currentSelector, currentReasoning != null ? currentReasoning : "", tokensPerLocator));
-            return results;
+            return AIProvider.parseBatchResponse(text, totalTokens, locators.size());
         } catch (IOException | InterruptedException e) {
             throw new RuntimeException("Failed to call Gemini API (batch): " + e.getMessage(), e);
         }
+    }
+
+    private String buildBatchPrompt(String domSnapshot, Map<String, String> locators) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("You are a test automation expert. Multiple UI locators have broken and need to be healed.\n\n");
+        sb.append("Current page DOM:\n```html\n").append(domSnapshot).append("\n```\n\n");
+        sb.append("Broken locators:\n");
+        int i = 1;
+        for (Map.Entry<String, String> entry : locators.entrySet()) {
+            sb.append(i++).append(". Original: ").append(entry.getKey())
+              .append(" | Description: ").append(entry.getValue()).append("\n");
+        }
+        sb.append("\nFor each locator, find the best CSS or XPath selector.\n");
+        sb.append("Respond in this exact format for each (no markdown, no extra text):\n");
+        sb.append("ORIGINAL: <original selector>\nSELECTOR: <new selector>\nREASONING: <brief explanation>\n\n");
+        return sb.toString();
     }
 
     private String buildPrompt(String domSnapshot, String description, String originalSelector) {

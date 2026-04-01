@@ -11,7 +11,6 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
-import java.util.LinkedHashMap;
 import java.util.Map;
 
 public class ClaudeProvider implements AIProvider {
@@ -104,7 +103,7 @@ public class ClaudeProvider implements AIProvider {
             int outputTokens = root.path("usage").path("output_tokens").asInt(0);
             int totalTokens = inputTokens + outputTokens;
 
-            return parseBatchResponse(text, totalTokens, locators.size());
+            return AIProvider.parseBatchResponse(text, totalTokens, locators.size());
         } catch (IOException | InterruptedException e) {
             throw new RuntimeException("Failed to call Claude API (batch): " + e.getMessage(), e);
         }
@@ -124,36 +123,6 @@ public class ClaudeProvider implements AIProvider {
         sb.append("Respond in this exact format for each (no markdown, no extra text):\n");
         sb.append("ORIGINAL: <original selector>\nSELECTOR: <new selector>\nREASONING: <brief explanation>\n\n");
         return sb.toString();
-    }
-
-    private Map<String, AIResponse> parseBatchResponse(String text, int totalTokens, int count) {
-        Map<String, AIResponse> results = new LinkedHashMap<>();
-        int tokensPerLocator = totalTokens / Math.max(count, 1);
-
-        String currentOriginal = null;
-        String currentSelector = null;
-        String currentReasoning = null;
-
-        for (String line : text.split("\n")) {
-            line = line.trim();
-            if (line.startsWith("ORIGINAL:")) {
-                if (currentOriginal != null && currentSelector != null) {
-                    results.put(currentOriginal, new AIResponse(currentSelector, currentReasoning != null ? currentReasoning : "", tokensPerLocator));
-                }
-                currentOriginal = line.substring("ORIGINAL:".length()).trim();
-                currentSelector = null;
-                currentReasoning = null;
-            } else if (line.startsWith("SELECTOR:")) {
-                currentSelector = line.substring("SELECTOR:".length()).trim();
-            } else if (line.startsWith("REASONING:")) {
-                currentReasoning = line.substring("REASONING:".length()).trim();
-            }
-        }
-        if (currentOriginal != null && currentSelector != null) {
-            results.put(currentOriginal, new AIResponse(currentSelector, currentReasoning != null ? currentReasoning : "", tokensPerLocator));
-        }
-
-        return results;
     }
 
     private String buildPrompt(String domSnapshot, String description, String originalSelector) {
