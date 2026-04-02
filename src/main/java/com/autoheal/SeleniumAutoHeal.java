@@ -17,9 +17,7 @@ import org.openqa.selenium.WebElement;
 
 import com.autoheal.util.ScreenshotUtil;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 
 /**
  * AutoHeal entry point for Selenium-only projects.
@@ -80,6 +78,32 @@ public class SeleniumAutoHeal {
      */
     public WebElement find(By original, String description, String sourceFile, int sourceLine) {
         return healer.find(original, description, sourceFile, sourceLine);
+    }
+
+    /**
+     * Capture the current page DOM now.
+     * Call after navigation so the DOM is ready before heal calls.
+     */
+    public void captureDom() {
+        healer.captureDom();
+    }
+
+    /**
+     * Enable batch mode: broken locators are collected instead of healed immediately.
+     * During batch mode, find() returns null for broken locators.
+     * Call flushBatch() to heal all collected locators in one AI call.
+     */
+    public void startBatch() {
+        healer.setBatchMode(true);
+    }
+
+    /**
+     * Heal all collected broken locators in one AI call.
+     * Returns map of original selector -> healed WebElement.
+     */
+    public Map<String, WebElement> flushBatch() {
+        healer.setBatchMode(false);
+        return healer.flushBatch();
     }
 
     /**

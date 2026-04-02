@@ -10,7 +10,7 @@ A Maven library that auto-heals broken locators in Playwright and Selenium tests
 - **Caching** — Previously healed locators are cached to avoid redundant AI calls
 - **Failure Analysis** — AI-powered test failure analysis with screenshot support
 - **Configurable Image Quality** — Control screenshot JPEG quality (1-100) for failure analysis
-- **Batch Mode** — Collect broken locators and heal them all in one AI call (Playwright)
+- **Batch Mode** — Collect broken locators and heal them all in one AI call (Playwright & Selenium)
 - **Reporting** — Generates HTML reports with summary stats, screenshots, and failure analysis
 - **Report Naming** — Custom report names for better organization
 - **Source Auto-Fix** — Optionally updates your page object source files with healed selectors
@@ -181,9 +181,11 @@ FailureAnalysis analysis = healer.analyzeFailure(context);
 
 Failure analysis results are included in the HTML report with expandable details and screenshots.
 
-### Batch Mode (Playwright)
+### Batch Mode
 
-Collect multiple broken locators and heal them all in a single AI call:
+Collect multiple broken locators and heal them all in a single AI call.
+
+**Playwright:**
 
 ```java
 PlaywrightAutoHeal healer = PlaywrightAutoHeal.builder()
@@ -200,6 +202,25 @@ healer.find(page.locator("#old-3"), "Submit button");
 
 // Heal all collected locators in one AI call
 Map<String, Locator> healed = healer.flushBatch();
+```
+
+**Selenium:**
+
+```java
+SeleniumAutoHeal healer = SeleniumAutoHeal.builder()
+    .driver(driver)
+    .build();
+
+healer.captureDom();   // Capture DOM once
+healer.startBatch();   // Enable batch mode
+
+// These return null during batch mode — broken locators are collected
+healer.find(By.id("old-1"), "Username field");
+healer.find(By.id("old-2"), "Password field");
+healer.find(By.id("old-3"), "Submit button");
+
+// Heal all collected locators in one AI call
+Map<String, WebElement> healed = healer.flushBatch();
 ```
 
 ## Healing Flow

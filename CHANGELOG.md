@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.2.0] - 2026-04-02
+
+### Added
+- **Batch mode for Selenium**: `captureDom()`, `startBatch()`, and `flushBatch()` on `SeleniumAutoHeal` and `SeleniumHealer` — collect broken locators and heal them all in a single AI call, matching the existing Playwright batch mode
+
 ## [1.1.2] - 2026-04-02
 
 ### Added
