@@ -121,6 +121,14 @@ public class ReportGenerator {
             if (r.getFailureAnalysis() != null) {
                 sb.append(buildFailureAnalysisRow(r.getFailureAnalysis()));
             }
+
+            if (r.getScreenshotBase64() != null) {
+                sb.append("<tr class=\"screenshot-row\"><td colspan=\"8\" style=\"background:#f9f9f9;padding:12px 16px;white-space:normal;\">");
+                sb.append("<details><summary style=\"cursor:pointer;font-weight:600;color:#2980b9;\">Show Screenshot</summary>");
+                sb.append("<img src=\"data:image/jpeg;base64,").append(r.getScreenshotBase64()).append("\" ");
+                sb.append("style=\"max-width:100%;margin-top:8px;border-radius:6px;\" />");
+                sb.append("</details></td></tr>\n");
+            }
         }
         return sb.toString();
     }
@@ -166,6 +174,7 @@ public class ReportGenerator {
         sb.append(".cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:20px 0;}");
         sb.append(".card{background:#fff;border-radius:8px;padding:16px;text-align:center;box-shadow:0 2px 4px rgba(0,0,0,0.1);}");
         sb.append(".card .value{font-size:28px;font-weight:bold;color:#1a1a2e;}");
+        sb.append(".card.time .value{font-size:18px;}");
         sb.append(".card .label{font-size:12px;color:#666;margin-top:4px;}");
         sb.append(".card.green .value{color:#27ae60;} .card.red .value{color:#e74c3c;} .card.blue .value{color:#2980b9;} .card.orange .value{color:#f39c12;}");
         sb.append("table{width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 4px rgba(0,0,0,0.1);}");
@@ -185,7 +194,7 @@ public class ReportGenerator {
         sb.append("<div class='card orange'><div class='value'>").append(domHealed).append("</div><div class='label'>DOM Healed</div></div>");
         sb.append("<div class='card blue'><div class='value'>").append(cached).append("</div><div class='label'>Cached</div></div>");
         sb.append("<div class='card'><div class='value'>").append(totalTokens).append("</div><div class='label'>Tokens Used</div></div>");
-        sb.append("<div class='card'><div class='value'>").append(formatTime(totalTime)).append("</div><div class='label'>Total Time</div></div>");
+        sb.append("<div class='card time'><div class='value'>").append(formatTime(totalTime)).append("</div><div class='label'>Total Time</div></div>");
         sb.append("</div>");
         sb.append("<table><thead><tr><th>Original Selector</th><th>Actual Selector</th><th>Strategy</th><th>Status</th><th>Time</th><th>Tokens</th><th>Reasoning</th><th>Source</th></tr></thead><tbody>");
         sb.append(buildTableRows(records));

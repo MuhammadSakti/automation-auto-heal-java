@@ -31,6 +31,7 @@
         }
         .card:hover { transform: translateY(-2px); }
         .card .value { font-size: 32px; font-weight: 700; }
+        .card.time .value { font-size: 18px; }
         .card .label { font-size: 12px; color: #888; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
         .card.green .value { color: #27ae60; }
         .card.red .value { color: #e74c3c; }
@@ -78,6 +79,8 @@
         .badge-original { background: #e8f5e9; color: #2e7d32; }
         .badge-cached { background: #e3f2fd; color: #1565c0; }
         .badge-healed { background: #fff3e0; color: #e65100; }
+        .screenshot-row td { white-space: normal; }
+        .screenshot-row summary { cursor: pointer; }
     </style>
 </head>
 <body>
@@ -93,7 +96,7 @@
             <div class="card orange"><div class="value">{{domHealed}}</div><div class="label">DOM Healed</div></div>
             <div class="card purple"><div class="value">{{cached}}</div><div class="label">Cached</div></div>
             <div class="card"><div class="value">{{totalTokens}}</div><div class="label">Tokens Used</div></div>
-            <div class="card"><div class="value">{{totalTime}}</div><div class="label">Total Time</div></div>
+            <div class="card time"><div class="value">{{totalTime}}</div><div class="label">Total Time</div></div>
         </div>
 
         <div class="table-wrapper">

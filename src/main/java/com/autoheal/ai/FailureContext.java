@@ -59,9 +59,6 @@ public class FailureContext {
         }
 
         public FailureContext build() {
-            if (screenshotBase64 == null || screenshotBase64.isEmpty()) {
-                throw new IllegalStateException("screenshotBase64 is required");
-            }
             if (errorLog == null || errorLog.isEmpty()) {
                 throw new IllegalStateException("errorLog is required");
             }

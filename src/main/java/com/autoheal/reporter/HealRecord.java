@@ -20,6 +20,7 @@ public class HealRecord {
     private int sourceLine;
     private String elementInfo;
     private FailureAnalysis failureAnalysis;
+    private String screenshotBase64;
 
     public HealRecord() {}
 
@@ -83,6 +84,9 @@ public class HealRecord {
 
     public FailureAnalysis getFailureAnalysis() { return failureAnalysis; }
     public void setFailureAnalysis(FailureAnalysis failureAnalysis) { this.failureAnalysis = failureAnalysis; }
+
+    public String getScreenshotBase64() { return screenshotBase64; }
+    public void setScreenshotBase64(String screenshotBase64) { this.screenshotBase64 = screenshotBase64; }
 
     public static HealRecord fromFailureAnalysis(FailureAnalysis analysis) {
         HealRecord r = new HealRecord();

@@ -71,7 +71,9 @@ public class SeleniumAutoHeal {
 
     public FailureAnalysis analyzeFailure(FailureContext context) {
         FailureAnalysis result = aiProvider.analyzeFailure(context);
-        records.add(HealRecord.fromFailureAnalysis(result));
+        HealRecord record = HealRecord.fromFailureAnalysis(result);
+        record.setScreenshotBase64(context.getScreenshotBase64());
+        records.add(record);
         return result;
     }
 
