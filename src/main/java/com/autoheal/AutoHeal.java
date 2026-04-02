@@ -36,12 +36,12 @@ public class AutoHeal {
     private Object playwrightHealer;
     private Object seleniumHealer;
 
-    private AutoHeal(AutoHealConfig config, Object playwrightPage, Object seleniumDriver) {
+    private AutoHeal(AutoHealConfig config, Object playwrightPage, Object seleniumDriver, String reportName) {
         this.config = config;
         this.aiProvider = createProvider(config);
         this.cache = new HealCache(config.isCacheEnabled(), config.getReportPath());
         this.records = Collections.synchronizedList(new ArrayList<>());
-        this.reportGenerator = new ReportGenerator(config.getReportPath());
+        this.reportGenerator = new ReportGenerator(config.getReportPath(), reportName);
         this.sourceFixer = new SourceFixer();
 
         this.playwrightPage = playwrightPage;
@@ -106,7 +106,9 @@ public class AutoHeal {
     // --- Failure Analysis ---
 
     public FailureAnalysis analyzeFailure(FailureContext context) {
-        return aiProvider.analyzeFailure(context);
+        FailureAnalysis result = aiProvider.analyzeFailure(context);
+        records.add(HealRecord.fromFailureAnalysis(result));
+        return result;
     }
 
     public FailureAnalysis analyzeFailure(String errorLog) {
@@ -128,7 +130,7 @@ public class AutoHeal {
                 .errorLog(errorLog)
                 .pageUrl(page.url())
                 .build();
-        return aiProvider.analyzeFailure(context);
+        return analyzeFailure(context);
     }
 
     private FailureAnalysis analyzeFailureSelenium(String errorLog) {
@@ -141,7 +143,7 @@ public class AutoHeal {
                 .errorLog(errorLog)
                 .pageUrl(driver.getCurrentUrl())
                 .build();
-        return aiProvider.analyzeFailure(context);
+        return analyzeFailure(context);
     }
 
     // --- Report & Fix ---
@@ -214,6 +216,7 @@ public class AutoHeal {
         private AutoHealConfig config;
         private Object playwrightPage;
         private Object seleniumDriver;
+        private String reportName;
 
         public Builder config(AutoHealConfig config) {
             this.config = config;
@@ -238,6 +241,11 @@ public class AutoHeal {
             return this;
         }
 
+        public Builder reportName(String reportName) {
+            this.reportName = reportName;
+            return this;
+        }
+
         public AutoHeal build() {
             if (config == null) {
                 config = AutoHealConfig.fromEnv();
@@ -245,7 +253,7 @@ public class AutoHeal {
             if (playwrightPage == null && seleniumDriver == null) {
                 throw new IllegalStateException("Either playwrightPage or seleniumDriver must be set.");
             }
-            return new AutoHeal(config, playwrightPage, seleniumDriver);
+            return new AutoHeal(config, playwrightPage, seleniumDriver, reportName);
         }
     }
 }

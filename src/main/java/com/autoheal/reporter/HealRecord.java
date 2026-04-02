@@ -1,5 +1,6 @@
 package com.autoheal.reporter;
 
+import com.autoheal.ai.FailureAnalysis;
 import com.autoheal.finder.HealResult;
 import com.fasterxml.jackson.annotation.JsonInclude;
 
@@ -18,6 +19,7 @@ public class HealRecord {
     private String sourceFile;
     private int sourceLine;
     private String elementInfo;
+    private FailureAnalysis failureAnalysis;
 
     public HealRecord() {}
 
@@ -78,4 +80,16 @@ public class HealRecord {
     public void setSourceFile(String sourceFile) { this.sourceFile = sourceFile; }
     public void setSourceLine(int sourceLine) { this.sourceLine = sourceLine; }
     public void setElementInfo(String elementInfo) { this.elementInfo = elementInfo; }
+
+    public FailureAnalysis getFailureAnalysis() { return failureAnalysis; }
+    public void setFailureAnalysis(FailureAnalysis failureAnalysis) { this.failureAnalysis = failureAnalysis; }
+
+    public static HealRecord fromFailureAnalysis(FailureAnalysis analysis) {
+        HealRecord r = new HealRecord();
+        r.status = Status.FAILED;
+        r.reasoning = analysis.getSummary();
+        r.tokensUsed = analysis.getTokensUsed();
+        r.failureAnalysis = analysis;
+        return r;
+    }
 }

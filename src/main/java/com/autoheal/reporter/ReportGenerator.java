@@ -1,5 +1,6 @@
 package com.autoheal.reporter;
 
+import com.autoheal.ai.FailureAnalysis;
 import com.autoheal.finder.HealResult;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -17,28 +18,37 @@ import java.util.List;
 public class ReportGenerator {
 
     private final String reportPath;
+    private final String reportName;
     private final ObjectMapper mapper = new ObjectMapper();
 
     public ReportGenerator(String reportPath) {
+        this(reportPath, null);
+    }
+
+    public ReportGenerator(String reportPath, String reportName) {
         this.reportPath = reportPath;
+        this.reportName = reportName;
     }
 
     public void generate(List<HealRecord> records) {
         if (records.isEmpty()) return;
 
-        String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
+        LocalDateTime now = LocalDateTime.now();
+        String fileTimestamp = now.format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
+        String displayTimestamp = now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+        String filePrefix = reportName != null ? "AutoHeal_" + reportName + "_" : "AutoHeal_";
         Path dir = Paths.get(reportPath);
 
         try {
             Files.createDirectories(dir);
 
             // JSON report
-            File jsonFile = dir.resolve("AutoHeal_" + timestamp + ".json").toFile();
+            File jsonFile = dir.resolve(filePrefix + fileTimestamp + ".json").toFile();
             mapper.writerWithDefaultPrettyPrinter().writeValue(jsonFile, records);
 
             // HTML report
-            String html = generateHtml(records, timestamp);
-            Path htmlFile = dir.resolve("AutoHeal_" + timestamp + ".html");
+            String html = generateHtml(records, displayTimestamp);
+            Path htmlFile = dir.resolve(filePrefix + fileTimestamp + ".html");
             Files.write(htmlFile, html.getBytes(StandardCharsets.UTF_8));
 
             System.out.println("[AutoHeal] Reports generated at: " + dir.toAbsolutePath());
@@ -50,7 +60,15 @@ public class ReportGenerator {
         }
     }
 
-    private String generateHtml(List<HealRecord> records, String timestamp) {
+    static String formatTime(long ms) {
+        long hours = ms / 3_600_000;
+        long minutes = (ms % 3_600_000) / 60_000;
+        long seconds = (ms % 60_000) / 1_000;
+        long millis = ms % 1_000;
+        return String.format("%02d:%02d:%02d.%03d", hours, minutes, seconds, millis);
+    }
+
+    private String generateHtml(List<HealRecord> records, String displayTimestamp) {
         long total = records.size();
         long successful = records.stream().filter(r -> r.getStatus() == HealRecord.Status.SUCCESS).count();
         long failed = total - successful;
@@ -66,7 +84,7 @@ public class ReportGenerator {
                 String template = new String(is.readAllBytes(), StandardCharsets.UTF_8);
                 String jsonData = mapper.writeValueAsString(records);
                 return template
-                        .replace("{{timestamp}}", timestamp)
+                        .replace("{{timestamp}}", displayTimestamp)
                         .replace("{{total}}", String.valueOf(total))
                         .replace("{{successful}}", String.valueOf(successful))
                         .replace("{{failed}}", String.valueOf(failed))
@@ -74,7 +92,7 @@ public class ReportGenerator {
                         .replace("{{domHealed}}", String.valueOf(domHealed))
                         .replace("{{cached}}", String.valueOf(cached))
                         .replace("{{totalTokens}}", String.valueOf(totalTokens))
-                        .replace("{{totalTime}}", String.valueOf(totalTime))
+                        .replace("{{totalTime}}", formatTime(totalTime))
                         .replace("{{records}}", jsonData)
                         .replace("{{tableRows}}", buildTableRows(records));
             }
@@ -82,7 +100,7 @@ public class ReportGenerator {
         }
 
         // Fallback: inline HTML
-        return buildInlineHtml(records, timestamp, total, successful, failed, original, domHealed, cached, totalTokens, totalTime);
+        return buildInlineHtml(records, displayTimestamp, total, successful, failed, original, domHealed, cached, totalTokens, totalTime);
     }
 
     private String buildTableRows(List<HealRecord> records) {
@@ -94,22 +112,53 @@ public class ReportGenerator {
             sb.append("<td>").append(escapeHtml(r.getActualSelector())).append("</td>");
             sb.append("<td>").append(r.getStrategy()).append("</td>");
             sb.append("<td>").append(r.getStatus()).append("</td>");
-            sb.append("<td>").append(r.getTimeMs()).append("ms</td>");
+            sb.append("<td>").append(formatTime(r.getTimeMs())).append("</td>");
             sb.append("<td>").append(r.getTokensUsed()).append("</td>");
             sb.append("<td>").append(escapeHtml(r.getReasoning())).append("</td>");
             sb.append("<td>").append(r.getSourceFile() != null ? escapeHtml(r.getSourceFile()) + ":" + r.getSourceLine() : "-").append("</td>");
             sb.append("</tr>\n");
+
+            if (r.getFailureAnalysis() != null) {
+                sb.append(buildFailureAnalysisRow(r.getFailureAnalysis()));
+            }
         }
         return sb.toString();
     }
 
-    private String buildInlineHtml(List<HealRecord> records, String timestamp,
+    private String buildFailureAnalysisRow(FailureAnalysis analysis) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("<tr class=\"analysis-row\"><td colspan=\"8\" style=\"background:#fff8f0;padding:12px 16px;white-space:normal;\">");
+        sb.append("<details><summary style=\"cursor:pointer;font-weight:600;color:#e65100;\">Failure Analysis</summary>");
+        sb.append("<div style=\"margin-top:8px;\">");
+        sb.append("<p><strong>Summary:</strong> ").append(escapeHtml(analysis.getSummary())).append("</p>");
+
+        if (!analysis.getPossibleCauses().isEmpty()) {
+            sb.append("<p style=\"margin-top:6px;\"><strong>Possible Causes:</strong></p><ul>");
+            for (String cause : analysis.getPossibleCauses()) {
+                sb.append("<li>").append(escapeHtml(cause)).append("</li>");
+            }
+            sb.append("</ul>");
+        }
+
+        if (!analysis.getSuggestions().isEmpty()) {
+            sb.append("<p style=\"margin-top:6px;\"><strong>Suggestions:</strong></p><ul>");
+            for (String suggestion : analysis.getSuggestions()) {
+                sb.append("<li>").append(escapeHtml(suggestion)).append("</li>");
+            }
+            sb.append("</ul>");
+        }
+
+        sb.append("</div></details></td></tr>\n");
+        return sb.toString();
+    }
+
+    private String buildInlineHtml(List<HealRecord> records, String displayTimestamp,
                                    long total, long successful, long failed,
                                    long original, long domHealed, long cached,
                                    int totalTokens, long totalTime) {
         StringBuilder sb = new StringBuilder();
         sb.append("<!DOCTYPE html><html><head><meta charset='UTF-8'>");
-        sb.append("<title>AutoHeal Report - ").append(timestamp).append("</title>");
+        sb.append("<title>AutoHeal Report - ").append(displayTimestamp).append("</title>");
         sb.append("<style>");
         sb.append("body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;margin:20px;background:#f5f5f5;}");
         sb.append(".container{max-width:1200px;margin:0 auto;}");
@@ -127,7 +176,7 @@ public class ReportGenerator {
         sb.append("tr:hover td{background:#f8f9fa;}");
         sb.append("</style></head><body><div class='container'>");
         sb.append("<h1>AutoHeal Report</h1>");
-        sb.append("<p style='color:#666;'>Generated: ").append(timestamp).append("</p>");
+        sb.append("<p style='color:#666;'>Generated: ").append(displayTimestamp).append("</p>");
         sb.append("<div class='cards'>");
         sb.append("<div class='card'><div class='value'>").append(total).append("</div><div class='label'>Total</div></div>");
         sb.append("<div class='card green'><div class='value'>").append(successful).append("</div><div class='label'>Successful</div></div>");
@@ -136,7 +185,7 @@ public class ReportGenerator {
         sb.append("<div class='card orange'><div class='value'>").append(domHealed).append("</div><div class='label'>DOM Healed</div></div>");
         sb.append("<div class='card blue'><div class='value'>").append(cached).append("</div><div class='label'>Cached</div></div>");
         sb.append("<div class='card'><div class='value'>").append(totalTokens).append("</div><div class='label'>Tokens Used</div></div>");
-        sb.append("<div class='card'><div class='value'>").append(totalTime).append("ms</div><div class='label'>Total Time</div></div>");
+        sb.append("<div class='card'><div class='value'>").append(formatTime(totalTime)).append("</div><div class='label'>Total Time</div></div>");
         sb.append("</div>");
         sb.append("<table><thead><tr><th>Original Selector</th><th>Actual Selector</th><th>Strategy</th><th>Status</th><th>Time</th><th>Tokens</th><th>Reasoning</th><th>Source</th></tr></thead><tbody>");
         sb.append(buildTableRows(records));
