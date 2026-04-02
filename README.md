@@ -5,10 +5,14 @@ A Maven library that auto-heals broken locators in Playwright and Selenium tests
 ## Features
 
 - **AI-Powered Healing** — Supports Claude, OpenAI, and Gemini as AI providers
-- **Playwright & Selenium** — Works with both frameworks
+- **Playwright & Selenium** — Dedicated entry point for each framework
 - **Smart Fallback** — Tries original locator → cache → AI healing
 - **Caching** — Previously healed locators are cached to avoid redundant AI calls
-- **Reporting** — Generates JSON and HTML reports with summary stats
+- **Failure Analysis** — AI-powered test failure analysis with screenshot support
+- **Configurable Image Quality** — Control screenshot JPEG quality (1-100) for failure analysis
+- **Batch Mode** — Collect broken locators and heal them all in one AI call (Playwright)
+- **Reporting** — Generates HTML reports with summary stats, screenshots, and failure analysis
+- **Report Naming** — Custom report names for better organization
 - **Source Auto-Fix** — Optionally updates your page object source files with healed selectors
 
 ## Installation
@@ -29,7 +33,7 @@ Add the repository and dependency to your `pom.xml`:
     <dependency>
         <groupId>com.autoheal</groupId>
         <artifactId>auto-heal</artifactId>
-        <version>1.0.0</version>
+        <version>1.1.2</version>
     </dependency>
 </dependencies>
 ```
@@ -73,39 +77,37 @@ AutoHealConfig config = AutoHealConfig.builder()
 
 ## Usage
 
+Choose the entry point for your framework:
+
+| Entry Point | When to Use |
+|-------------|-------------|
+| `PlaywrightAutoHeal` | Playwright projects |
+| `SeleniumAutoHeal` | Selenium projects |
+
 ### Playwright
 
 ```java
-AutoHeal healer = AutoHeal.builder()
+PlaywrightAutoHeal healer = PlaywrightAutoHeal.builder()
     .config(AutoHealConfig.fromEnv())
-    .playwrightPage(page)
+    .page(page)
+    .reportName("HomePage")
     .build();
 
-// The healer tries the original locator first.
-// If it fails, it checks cache, then asks AI to find the element.
 Locator element = healer.find(
     page.locator("//div[@class='old-class']"),
-    "Kos name field showing 'Kos Haji Noval Bekasi'"
+    "Kos name field"
 );
 
-// With source file info (for auto-fix)
-Locator element = healer.find(
-    page.locator("//div[@class='old-class']"),
-    "Kos name field",
-    "src/test/java/pages/KosPage.java",
-    25
-);
-
-// After test run — generates report and applies fixes if autofix=auto
 healer.finish();
 ```
 
 ### Selenium
 
 ```java
-AutoHeal healer = AutoHeal.builder()
+SeleniumAutoHeal healer = SeleniumAutoHeal.builder()
     .config(AutoHealConfig.fromEnv())
-    .seleniumDriver(driver)
+    .driver(driver)
+    .reportName("LoginPage")
     .build();
 
 WebElement element = healer.find(
@@ -114,6 +116,90 @@ WebElement element = healer.find(
 );
 
 healer.finish();
+```
+
+### Source Auto-Fix
+
+To enable automatic source code updates, pass source location info when calling `find()`:
+
+```java
+// Option A: explicit file + line
+Locator element = healer.find(
+    page.locator("//div[@class='old-class']"),
+    "Kos name field",
+    "src/test/java/pages/KosPage.java",
+    25
+);
+
+// Option B: page object reflection (resolves source from field)
+Locator element = healer.find(
+    page.locator("//div[@class='old-class']"),
+    "Kos name field",
+    this
+);
+```
+
+Set `AUTOHEAL_AUTOFIX=auto` and call `finish()` — the library will replace the old selector in your source file with the healed one.
+
+For manual control, use `AUTOHEAL_AUTOFIX=manual` and call:
+
+```java
+List<SourceFixer.FixResult> fixes = healer.applyFixes();
+```
+
+### Failure Analysis
+
+Analyze test failures using AI with an auto-captured screenshot:
+
+```java
+try {
+    // ... test steps
+} catch (Exception e) {
+    // Default quality (70%)
+    FailureAnalysis analysis = healer.analyzeFailure(e.getMessage());
+
+    // Custom quality (1-100) — higher = clearer screenshot
+    FailureAnalysis analysis = healer.analyzeFailure(e.getMessage(), 90);
+
+    System.out.println(analysis.getSummary());
+    System.out.println(analysis.getPossibleCauses());
+    System.out.println(analysis.getSuggestions());
+}
+```
+
+You can also build a `FailureContext` manually if you want full control:
+
+```java
+FailureContext context = FailureContext.builder()
+    .screenshotBase64(base64Screenshot)
+    .errorLog(errorLog)
+    .pageUrl(currentUrl)
+    .build();
+
+FailureAnalysis analysis = healer.analyzeFailure(context);
+```
+
+Failure analysis results are included in the HTML report with expandable details and screenshots.
+
+### Batch Mode (Playwright)
+
+Collect multiple broken locators and heal them all in a single AI call:
+
+```java
+PlaywrightAutoHeal healer = PlaywrightAutoHeal.builder()
+    .page(page)
+    .build();
+
+healer.captureDom();   // Capture DOM once
+healer.startBatch();   // Enable batch mode
+
+// These won't trigger AI calls yet — just collect broken locators
+healer.find(page.locator("#old-1"), "Username field");
+healer.find(page.locator("#old-2"), "Password field");
+healer.find(page.locator("#old-3"), "Submit button");
+
+// Heal all collected locators in one AI call
+Map<String, Locator> healed = healer.flushBatch();
 ```
 
 ## Healing Flow
@@ -127,31 +213,26 @@ healer.finish();
 
 After calling `healer.finish()` or `healer.generateReport()`, reports are generated at the configured path:
 
-- `AutoHeal_{timestamp}.json` — Machine-readable report
-- `AutoHeal_{timestamp}.html` — Visual report with summary cards and detail table
+- `AutoHeal_{ReportName}_{timestamp}.html` — Visual report with summary cards, detail table, failure analysis, and screenshots
 
-Each record includes: original selector, actual selector, strategy used, status, time, tokens consumed, AI reasoning, and source location.
+Use `.reportName("HomePage")` on the builder for descriptive file names. Without it, only the timestamp is used.
 
-## Source Auto-Fix
-
-When `AUTOHEAL_AUTOFIX=auto`, the library automatically updates your page object files after the test run, replacing broken selectors with healed ones at the exact source line.
-
-For manual control, use `AUTOHEAL_AUTOFIX=manual` and call:
-
-```java
-List<SourceFixer.FixResult> fixes = healer.applyFixes();
-```
+Each record includes: original selector, actual selector, strategy used, status, time, tokens consumed, AI reasoning, and source location. Failure analysis records include summary, possible causes, suggestions, and a collapsible screenshot.
 
 ## Project Structure
 
 ```
 src/main/java/com/autoheal/
-├── AutoHeal.java              # Main entry point with builder
+├── PlaywrightAutoHeal.java    # Playwright entry point with builder
+├── SeleniumAutoHeal.java      # Selenium entry point with builder
+├── AutoHealFactory.java       # AI provider factory
 ├── config/
 │   └── AutoHealConfig.java    # Configuration (env / .env / builder)
 ├── ai/
 │   ├── AIProvider.java        # Provider interface
 │   ├── AIResponse.java        # Response DTO
+│   ├── FailureContext.java    # Failure analysis input
+│   ├── FailureAnalysis.java   # Failure analysis result
 │   ├── ClaudeProvider.java    # Anthropic Claude API
 │   ├── OpenAIProvider.java    # OpenAI API
 │   └── GeminiProvider.java    # Google Gemini API
@@ -163,11 +244,12 @@ src/main/java/com/autoheal/
 │   └── HealCache.java         # In-memory + file-persisted cache
 ├── reporter/
 │   ├── HealRecord.java        # Record for reporting
-│   └── ReportGenerator.java   # JSON + HTML report generation
+│   └── ReportGenerator.java   # HTML report generation
 ├── fixer/
 │   └── SourceFixer.java       # Auto-fix source files
 └── util/
-    └── DomExtractor.java      # Clean DOM extraction
+    ├── DomExtractor.java      # Clean DOM extraction
+    └── ScreenshotUtil.java    # Screenshot compression and encoding
 ```
 
 ## Requirements
