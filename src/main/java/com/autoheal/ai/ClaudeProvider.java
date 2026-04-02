@@ -109,6 +109,56 @@ public class ClaudeProvider implements AIProvider {
         }
     }
 
+    @Override
+    public FailureAnalysis analyzeFailure(FailureContext context) {
+        try {
+            String prompt = AIProvider.buildFailureAnalysisPrompt(context);
+
+            ObjectNode body = mapper.createObjectNode();
+            body.put("model", model);
+            body.put("max_tokens", 2048);
+            ArrayNode messages = body.putArray("messages");
+            ObjectNode msg = messages.addObject();
+            msg.put("role", "user");
+            ArrayNode content = msg.putArray("content");
+
+            ObjectNode imagePart = content.addObject();
+            imagePart.put("type", "image");
+            ObjectNode source = imagePart.putObject("source");
+            source.put("type", "base64");
+            source.put("media_type", context.getMediaType());
+            source.put("data", context.getScreenshotBase64());
+
+            ObjectNode textPart = content.addObject();
+            textPart.put("type", "text");
+            textPart.put("text", prompt);
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(API_URL))
+                    .header("x-api-key", apiKey)
+                    .header("anthropic-version", "2023-06-01")
+                    .header("content-type", "application/json")
+                    .timeout(Duration.ofSeconds(60))
+                    .POST(HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(body)))
+                    .build();
+
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                throw new IOException("Claude API error " + response.statusCode() + ": " + response.body());
+            }
+
+            JsonNode root = mapper.readTree(response.body());
+            String text = root.path("content").get(0).path("text").asText();
+            int inputTokens = root.path("usage").path("input_tokens").asInt(0);
+            int outputTokens = root.path("usage").path("output_tokens").asInt(0);
+
+            return AIProvider.parseFailureResponse(text, inputTokens + outputTokens);
+        } catch (IOException | InterruptedException e) {
+            throw new RuntimeException("Failed to call Claude API for failure analysis: " + e.getMessage(), e);
+        }
+    }
+
     private String buildBatchPrompt(String domSnapshot, Map<String, String> locators) {
         StringBuilder sb = new StringBuilder();
         sb.append("You are a test automation expert. Multiple UI locators have broken and need to be healed.\n\n");

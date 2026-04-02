@@ -1,6 +1,8 @@
 package com.autoheal;
 
 import com.autoheal.ai.AIProvider;
+import com.autoheal.ai.FailureAnalysis;
+import com.autoheal.ai.FailureContext;
 import com.autoheal.cache.HealCache;
 import com.autoheal.config.AutoHealConfig;
 import com.autoheal.finder.PlaywrightHealer;
@@ -9,6 +11,8 @@ import com.autoheal.reporter.HealRecord;
 import com.autoheal.reporter.ReportGenerator;
 import com.microsoft.playwright.Locator;
 import com.microsoft.playwright.Page;
+
+import com.autoheal.util.ScreenshotUtil;
 
 import java.util.*;
 
@@ -19,6 +23,8 @@ import java.util.*;
 public class PlaywrightAutoHeal {
 
     private final AutoHealConfig config;
+    private final AIProvider aiProvider;
+    private final Page page;
     private final PlaywrightHealer healer;
     private final List<HealRecord> records;
     private final ReportGenerator reportGenerator;
@@ -26,7 +32,8 @@ public class PlaywrightAutoHeal {
 
     private PlaywrightAutoHeal(AutoHealConfig config, Page page) {
         this.config = config;
-        AIProvider aiProvider = AutoHealFactory.createProvider(config);
+        this.page = page;
+        this.aiProvider = AutoHealFactory.createProvider(config);
         this.records = Collections.synchronizedList(new ArrayList<>());
         HealCache cache = new HealCache(config.isCacheEnabled(), config.getReportPath());
         this.healer = new PlaywrightHealer(page, aiProvider, cache, records);
@@ -69,6 +76,21 @@ public class PlaywrightAutoHeal {
     public Map<String, Locator> flushBatch() {
         healer.setBatchMode(false);
         return healer.flushBatch();
+    }
+
+    public FailureAnalysis analyzeFailure(String errorLog) {
+        byte[] screenshotBytes = page.screenshot();
+        String base64 = ScreenshotUtil.compressToBase64(screenshotBytes);
+        FailureContext context = FailureContext.builder()
+                .screenshotBase64(base64)
+                .errorLog(errorLog)
+                .pageUrl(page.url())
+                .build();
+        return aiProvider.analyzeFailure(context);
+    }
+
+    public FailureAnalysis analyzeFailure(FailureContext context) {
+        return aiProvider.analyzeFailure(context);
     }
 
     public void generateReport() {

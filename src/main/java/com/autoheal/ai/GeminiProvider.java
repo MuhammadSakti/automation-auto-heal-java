@@ -103,6 +103,50 @@ public class GeminiProvider implements AIProvider {
         }
     }
 
+    @Override
+    public FailureAnalysis analyzeFailure(FailureContext context) {
+        try {
+            String prompt = AIProvider.buildFailureAnalysisPrompt(context);
+            String url = String.format(API_URL, model, apiKey);
+
+            ObjectNode body = mapper.createObjectNode();
+            ArrayNode contents = body.putArray("contents");
+            ObjectNode content = contents.addObject();
+            ArrayNode parts = content.putArray("parts");
+
+            ObjectNode imagePart = parts.addObject();
+            ObjectNode inlineData = imagePart.putObject("inline_data");
+            inlineData.put("mime_type", context.getMediaType());
+            inlineData.put("data", context.getScreenshotBase64());
+
+            ObjectNode textPart = parts.addObject();
+            textPart.put("text", prompt);
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .header("Content-Type", "application/json")
+                    .timeout(Duration.ofSeconds(60))
+                    .POST(HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(body)))
+                    .build();
+
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                throw new IOException("Gemini API error " + response.statusCode() + ": " + response.body());
+            }
+
+            JsonNode root = mapper.readTree(response.body());
+            String text = root.path("candidates").get(0)
+                    .path("content").path("parts").get(0)
+                    .path("text").asText();
+            int totalTokens = root.path("usageMetadata").path("totalTokenCount").asInt(0);
+
+            return AIProvider.parseFailureResponse(text, totalTokens);
+        } catch (IOException | InterruptedException e) {
+            throw new RuntimeException("Failed to call Gemini API for failure analysis: " + e.getMessage(), e);
+        }
+    }
+
     private String buildBatchPrompt(String domSnapshot, Map<String, String> locators) {
         StringBuilder sb = new StringBuilder();
         sb.append("You are a test automation expert. Multiple UI locators have broken and need to be healed.\n\n");

@@ -1,6 +1,8 @@
 package com.autoheal;
 
 import com.autoheal.ai.AIProvider;
+import com.autoheal.ai.FailureAnalysis;
+import com.autoheal.ai.FailureContext;
 import com.autoheal.cache.HealCache;
 import com.autoheal.config.AutoHealConfig;
 import com.autoheal.finder.SeleniumHealer;
@@ -8,8 +10,12 @@ import com.autoheal.fixer.SourceFixer;
 import com.autoheal.reporter.HealRecord;
 import com.autoheal.reporter.ReportGenerator;
 import org.openqa.selenium.By;
+import org.openqa.selenium.OutputType;
+import org.openqa.selenium.TakesScreenshot;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
+
+import com.autoheal.util.ScreenshotUtil;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -22,6 +28,8 @@ import java.util.List;
 public class SeleniumAutoHeal {
 
     private final AutoHealConfig config;
+    private final AIProvider aiProvider;
+    private final WebDriver driver;
     private final SeleniumHealer healer;
     private final List<HealRecord> records;
     private final ReportGenerator reportGenerator;
@@ -29,7 +37,8 @@ public class SeleniumAutoHeal {
 
     private SeleniumAutoHeal(AutoHealConfig config, WebDriver driver) {
         this.config = config;
-        AIProvider aiProvider = AutoHealFactory.createProvider(config);
+        this.driver = driver;
+        this.aiProvider = AutoHealFactory.createProvider(config);
         this.records = Collections.synchronizedList(new ArrayList<>());
         HealCache cache = new HealCache(config.isCacheEnabled(), config.getReportPath());
         this.healer = new SeleniumHealer(driver, aiProvider, cache, records);
@@ -47,6 +56,21 @@ public class SeleniumAutoHeal {
 
     public WebElement find(By original, String description, String sourceFile, int sourceLine) {
         return healer.find(original, description, sourceFile, sourceLine);
+    }
+
+    public FailureAnalysis analyzeFailure(String errorLog) {
+        String base64 = ((TakesScreenshot) driver).getScreenshotAs(OutputType.BASE64);
+        String compressed = ScreenshotUtil.compressBase64(base64);
+        FailureContext context = FailureContext.builder()
+                .screenshotBase64(compressed)
+                .errorLog(errorLog)
+                .pageUrl(driver.getCurrentUrl())
+                .build();
+        return aiProvider.analyzeFailure(context);
+    }
+
+    public FailureAnalysis analyzeFailure(FailureContext context) {
+        return aiProvider.analyzeFailure(context);
     }
 
     public void generateReport() {
