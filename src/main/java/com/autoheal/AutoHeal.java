@@ -7,6 +7,8 @@ import com.autoheal.fixer.SourceFixer;
 import com.autoheal.reporter.HealRecord;
 import com.autoheal.reporter.ReportGenerator;
 
+import com.autoheal.util.ScreenshotUtil;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -29,6 +31,8 @@ public class AutoHeal {
     private final ReportGenerator reportGenerator;
     private final SourceFixer sourceFixer;
 
+    private Object playwrightPage;
+    private Object seleniumDriver;
     private Object playwrightHealer;
     private Object seleniumHealer;
 
@@ -39,6 +43,9 @@ public class AutoHeal {
         this.records = Collections.synchronizedList(new ArrayList<>());
         this.reportGenerator = new ReportGenerator(config.getReportPath());
         this.sourceFixer = new SourceFixer();
+
+        this.playwrightPage = playwrightPage;
+        this.seleniumDriver = seleniumDriver;
 
         if (playwrightPage != null) {
             initPlaywright(playwrightPage);
@@ -94,6 +101,47 @@ public class AutoHeal {
                                                 String sourceFile, int sourceLine) {
         requireSelenium();
         return ((com.autoheal.finder.SeleniumHealer) seleniumHealer).find(original, description, sourceFile, sourceLine);
+    }
+
+    // --- Failure Analysis ---
+
+    public FailureAnalysis analyzeFailure(FailureContext context) {
+        return aiProvider.analyzeFailure(context);
+    }
+
+    public FailureAnalysis analyzeFailure(String errorLog) {
+        if (playwrightPage != null) {
+            return analyzeFailurePlaywright(errorLog);
+        }
+        if (seleniumDriver != null) {
+            return analyzeFailureSelenium(errorLog);
+        }
+        throw new IllegalStateException("No framework configured for auto-screenshot. Use analyzeFailure(FailureContext) instead.");
+    }
+
+    private FailureAnalysis analyzeFailurePlaywright(String errorLog) {
+        com.microsoft.playwright.Page page = (com.microsoft.playwright.Page) playwrightPage;
+        byte[] screenshotBytes = page.screenshot();
+        String base64 = ScreenshotUtil.compressToBase64(screenshotBytes);
+        FailureContext context = FailureContext.builder()
+                .screenshotBase64(base64)
+                .errorLog(errorLog)
+                .pageUrl(page.url())
+                .build();
+        return aiProvider.analyzeFailure(context);
+    }
+
+    private FailureAnalysis analyzeFailureSelenium(String errorLog) {
+        org.openqa.selenium.WebDriver driver = (org.openqa.selenium.WebDriver) seleniumDriver;
+        String base64 = ((org.openqa.selenium.TakesScreenshot) driver)
+                .getScreenshotAs(org.openqa.selenium.OutputType.BASE64);
+        String compressed = ScreenshotUtil.compressBase64(base64);
+        FailureContext context = FailureContext.builder()
+                .screenshotBase64(compressed)
+                .errorLog(errorLog)
+                .pageUrl(driver.getCurrentUrl())
+                .build();
+        return aiProvider.analyzeFailure(context);
     }
 
     // --- Report & Fix ---
