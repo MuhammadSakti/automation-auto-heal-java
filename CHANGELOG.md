@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.2] - 2026-04-02
+
+### Added
+- **Configurable image quality**: `analyzeFailure(String errorLog, int imageQuality)` overloads on `PlaywrightAutoHeal`, `SeleniumAutoHeal`, and `AutoHeal` — accepts JPEG quality percentage (1-100) for clearer screenshots in reports
+- `ScreenshotUtil.compressToBase64(byte[], int)` and `ScreenshotUtil.compressBase64(String, int)` for custom quality compression
+- Javadoc comments on all public methods across `PlaywrightAutoHeal`, `SeleniumAutoHeal`, and `AutoHeal`
+
 ## [1.1.1] - 2026-04-02
 
 ### Added

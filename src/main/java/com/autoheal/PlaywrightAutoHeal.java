@@ -41,14 +41,38 @@ public class PlaywrightAutoHeal {
         this.sourceFixer = new SourceFixer();
     }
 
+    /**
+     * Find or heal a broken locator using AI.
+     *
+     * @param original    the original locator that may be broken
+     * @param description human-readable description of the element
+     * @return a working locator, either the original or a healed replacement
+     */
     public Locator find(Locator original, String description) {
         return healer.find(original, description);
     }
 
+    /**
+     * Find or heal a broken locator using AI, with source fix support via page object reflection.
+     *
+     * @param original    the original locator that may be broken
+     * @param description human-readable description of the element
+     * @param pageObject  the page object instance containing the locator field
+     * @return a working locator, either the original or a healed replacement
+     */
     public Locator find(Locator original, String description, Object pageObject) {
         return healer.find(original, description, pageObject);
     }
 
+    /**
+     * Find or heal a broken locator using AI, with explicit source location for auto-fix.
+     *
+     * @param original    the original locator that may be broken
+     * @param description human-readable description of the element
+     * @param sourceFile  path to the source file containing the locator
+     * @param sourceLine  line number in the source file
+     * @return a working locator, either the original or a healed replacement
+     */
     public Locator find(Locator original, String description, String sourceFile, int sourceLine) {
         return healer.find(original, description, sourceFile, sourceLine);
     }
@@ -78,6 +102,12 @@ public class PlaywrightAutoHeal {
         return healer.flushBatch();
     }
 
+    /**
+     * Analyze a test failure using AI with an auto-captured screenshot at default quality (70%).
+     *
+     * @param errorLog the error log or stack trace from the failure
+     * @return AI-generated failure analysis
+     */
     public FailureAnalysis analyzeFailure(String errorLog) {
         byte[] screenshotBytes = page.screenshot();
         String base64 = ScreenshotUtil.compressToBase64(screenshotBytes);
@@ -89,6 +119,30 @@ public class PlaywrightAutoHeal {
         return analyzeFailure(context);
     }
 
+    /**
+     * Analyze a test failure using AI with an auto-captured screenshot at custom quality.
+     *
+     * @param errorLog     the error log or stack trace from the failure
+     * @param imageQuality JPEG quality percentage (1-100), higher values produce clearer screenshots
+     * @return AI-generated failure analysis
+     */
+    public FailureAnalysis analyzeFailure(String errorLog, int imageQuality) {
+        byte[] screenshotBytes = page.screenshot();
+        String base64 = ScreenshotUtil.compressToBase64(screenshotBytes, imageQuality);
+        FailureContext context = FailureContext.builder()
+                .screenshotBase64(base64)
+                .errorLog(errorLog)
+                .pageUrl(page.url())
+                .build();
+        return analyzeFailure(context);
+    }
+
+    /**
+     * Analyze a test failure using AI with a pre-built failure context.
+     *
+     * @param context the failure context containing screenshot, error log, and page URL
+     * @return AI-generated failure analysis
+     */
     public FailureAnalysis analyzeFailure(FailureContext context) {
         FailureAnalysis result = aiProvider.analyzeFailure(context);
         HealRecord record = HealRecord.fromFailureAnalysis(result);
@@ -97,14 +151,21 @@ public class PlaywrightAutoHeal {
         return result;
     }
 
+    /** Generate the HTML heal report from collected records. */
     public void generateReport() {
         reportGenerator.generate(records);
     }
 
+    /**
+     * Apply source code fixes for all healed locators.
+     *
+     * @return list of fix results indicating which fixes were applied
+     */
     public List<SourceFixer.FixResult> applyFixes() {
         return sourceFixer.applyFixes(records);
     }
 
+    /** Generate the report and apply auto-fixes if configured. */
     public void finish() {
         reportGenerator.generate(records);
         if (config.getAutoFix() == AutoHealConfig.AutoFixMode.AUTO) {
@@ -121,12 +182,14 @@ public class PlaywrightAutoHeal {
         }
     }
 
+    /** Return an unmodifiable view of all heal and failure analysis records. */
     public List<HealRecord> getRecords() {
         return Collections.unmodifiableList(records);
     }
 
     // --- Builder ---
 
+    /** Create a new builder for {@link PlaywrightAutoHeal}. */
     public static Builder builder() {
         return new Builder();
     }

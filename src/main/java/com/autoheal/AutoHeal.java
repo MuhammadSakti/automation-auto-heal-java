@@ -67,17 +67,41 @@ public class AutoHeal {
 
     // --- Playwright methods ---
 
+    /**
+     * Find or heal a broken Playwright locator using AI.
+     *
+     * @param original    the original locator that may be broken
+     * @param description human-readable description of the element
+     * @return a working locator, either the original or a healed replacement
+     */
     public com.microsoft.playwright.Locator find(com.microsoft.playwright.Locator original, String description) {
         requirePlaywright();
         return ((com.autoheal.finder.PlaywrightHealer) playwrightHealer).find(original, description);
     }
 
+    /**
+     * Find or heal a broken Playwright locator using AI, with source fix support via page object reflection.
+     *
+     * @param original    the original locator that may be broken
+     * @param description human-readable description of the element
+     * @param pageObject  the page object instance containing the locator field
+     * @return a working locator, either the original or a healed replacement
+     */
     public com.microsoft.playwright.Locator find(com.microsoft.playwright.Locator original, String description,
                                                   Object pageObject) {
         requirePlaywright();
         return ((com.autoheal.finder.PlaywrightHealer) playwrightHealer).find(original, description, pageObject);
     }
 
+    /**
+     * Find or heal a broken Playwright locator using AI, with explicit source location for auto-fix.
+     *
+     * @param original    the original locator that may be broken
+     * @param description human-readable description of the element
+     * @param sourceFile  path to the source file containing the locator
+     * @param sourceLine  line number in the source file
+     * @return a working locator, either the original or a healed replacement
+     */
     public com.microsoft.playwright.Locator find(com.microsoft.playwright.Locator original, String description,
                                                   String sourceFile, int sourceLine) {
         requirePlaywright();
@@ -86,17 +110,41 @@ public class AutoHeal {
 
     // --- Selenium methods ---
 
+    /**
+     * Find or heal a broken Selenium locator using AI.
+     *
+     * @param original    the original locator that may be broken
+     * @param description human-readable description of the element
+     * @return a working element, either from the original or a healed locator
+     */
     public org.openqa.selenium.WebElement find(org.openqa.selenium.By original, String description) {
         requireSelenium();
         return ((com.autoheal.finder.SeleniumHealer) seleniumHealer).find(original, description);
     }
 
+    /**
+     * Find or heal a broken Selenium locator using AI, with source fix support via page object reflection.
+     *
+     * @param original    the original locator that may be broken
+     * @param description human-readable description of the element
+     * @param pageObject  the page object instance containing the locator field
+     * @return a working element, either from the original or a healed locator
+     */
     public org.openqa.selenium.WebElement find(org.openqa.selenium.By original, String description,
                                                 Object pageObject) {
         requireSelenium();
         return ((com.autoheal.finder.SeleniumHealer) seleniumHealer).find(original, description, pageObject);
     }
 
+    /**
+     * Find or heal a broken Selenium locator using AI, with explicit source location for auto-fix.
+     *
+     * @param original    the original locator that may be broken
+     * @param description human-readable description of the element
+     * @param sourceFile  path to the source file containing the locator
+     * @param sourceLine  line number in the source file
+     * @return a working element, either from the original or a healed locator
+     */
     public org.openqa.selenium.WebElement find(org.openqa.selenium.By original, String description,
                                                 String sourceFile, int sourceLine) {
         requireSelenium();
@@ -105,6 +153,12 @@ public class AutoHeal {
 
     // --- Failure Analysis ---
 
+    /**
+     * Analyze a test failure using AI with a pre-built failure context.
+     *
+     * @param context the failure context containing screenshot, error log, and page URL
+     * @return AI-generated failure analysis
+     */
     public FailureAnalysis analyzeFailure(FailureContext context) {
         FailureAnalysis result = aiProvider.analyzeFailure(context);
         HealRecord record = HealRecord.fromFailureAnalysis(result);
@@ -113,12 +167,37 @@ public class AutoHeal {
         return result;
     }
 
+    /**
+     * Analyze a test failure using AI with an auto-captured screenshot at default quality (70%).
+     * Automatically detects whether Playwright or Selenium is configured.
+     *
+     * @param errorLog the error log or stack trace from the failure
+     * @return AI-generated failure analysis
+     */
     public FailureAnalysis analyzeFailure(String errorLog) {
         if (playwrightPage != null) {
             return analyzeFailurePlaywright(errorLog);
         }
         if (seleniumDriver != null) {
             return analyzeFailureSelenium(errorLog);
+        }
+        throw new IllegalStateException("No framework configured for auto-screenshot. Use analyzeFailure(FailureContext) instead.");
+    }
+
+    /**
+     * Analyze a test failure using AI with an auto-captured screenshot at custom quality.
+     * Automatically detects whether Playwright or Selenium is configured.
+     *
+     * @param errorLog     the error log or stack trace from the failure
+     * @param imageQuality JPEG quality percentage (1-100), higher values produce clearer screenshots
+     * @return AI-generated failure analysis
+     */
+    public FailureAnalysis analyzeFailure(String errorLog, int imageQuality) {
+        if (playwrightPage != null) {
+            return analyzeFailurePlaywright(errorLog, imageQuality);
+        }
+        if (seleniumDriver != null) {
+            return analyzeFailureSelenium(errorLog, imageQuality);
         }
         throw new IllegalStateException("No framework configured for auto-screenshot. Use analyzeFailure(FailureContext) instead.");
     }
@@ -148,16 +227,48 @@ public class AutoHeal {
         return analyzeFailure(context);
     }
 
+    private FailureAnalysis analyzeFailurePlaywright(String errorLog, int imageQuality) {
+        com.microsoft.playwright.Page page = (com.microsoft.playwright.Page) playwrightPage;
+        byte[] screenshotBytes = page.screenshot();
+        String base64 = ScreenshotUtil.compressToBase64(screenshotBytes, imageQuality);
+        FailureContext context = FailureContext.builder()
+                .screenshotBase64(base64)
+                .errorLog(errorLog)
+                .pageUrl(page.url())
+                .build();
+        return analyzeFailure(context);
+    }
+
+    private FailureAnalysis analyzeFailureSelenium(String errorLog, int imageQuality) {
+        org.openqa.selenium.WebDriver driver = (org.openqa.selenium.WebDriver) seleniumDriver;
+        String base64 = ((org.openqa.selenium.TakesScreenshot) driver)
+                .getScreenshotAs(org.openqa.selenium.OutputType.BASE64);
+        String compressed = ScreenshotUtil.compressBase64(base64, imageQuality);
+        FailureContext context = FailureContext.builder()
+                .screenshotBase64(compressed)
+                .errorLog(errorLog)
+                .pageUrl(driver.getCurrentUrl())
+                .build();
+        return analyzeFailure(context);
+    }
+
     // --- Report & Fix ---
 
+    /** Generate the HTML heal report from collected records. */
     public void generateReport() {
         reportGenerator.generate(records);
     }
 
+    /**
+     * Apply source code fixes for all healed locators.
+     *
+     * @return list of fix results indicating which fixes were applied
+     */
     public List<SourceFixer.FixResult> applyFixes() {
         return sourceFixer.applyFixes(records);
     }
 
+    /** Generate the report and apply auto-fixes if configured. */
     public void finish() {
         reportGenerator.generate(records);
         if (config.getAutoFix() == AutoHealConfig.AutoFixMode.AUTO) {
@@ -174,6 +285,7 @@ public class AutoHeal {
         }
     }
 
+    /** Return an unmodifiable view of all heal and failure analysis records. */
     public List<HealRecord> getRecords() {
         return Collections.unmodifiableList(records);
     }
@@ -205,6 +317,7 @@ public class AutoHeal {
 
     // --- Builder ---
 
+    /** Create a new builder for {@link AutoHeal}. */
     public static Builder builder() {
         return new Builder();
     }

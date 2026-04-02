@@ -34,6 +34,32 @@ public class ScreenshotUtil {
     }
 
     /**
+     * Resize screenshot bytes (PNG) to max width and re-encode as JPEG with custom quality.
+     * Returns base64-encoded JPEG. If processing fails, falls back to
+     * base64 of the original bytes.
+     *
+     * @param imageQuality JPEG quality percentage (1-100)
+     */
+    public static String compressToBase64(byte[] pngBytes, int imageQuality) {
+        if (imageQuality < 1 || imageQuality > 100) {
+            throw new IllegalArgumentException("imageQuality must be between 1 and 100, got: " + imageQuality);
+        }
+        float quality = imageQuality / 100f;
+        try {
+            BufferedImage original = ImageIO.read(new ByteArrayInputStream(pngBytes));
+            if (original == null) {
+                return Base64.getEncoder().encodeToString(pngBytes);
+            }
+
+            BufferedImage resized = resize(original);
+            byte[] jpegBytes = toJpeg(resized, quality);
+            return Base64.getEncoder().encodeToString(jpegBytes);
+        } catch (IOException e) {
+            return Base64.getEncoder().encodeToString(pngBytes);
+        }
+    }
+
+    /**
      * Compress a base64-encoded PNG screenshot. Returns base64-encoded JPEG.
      * Falls back to the original string if processing fails.
      */
@@ -41,6 +67,21 @@ public class ScreenshotUtil {
         try {
             byte[] pngBytes = Base64.getDecoder().decode(base64Png);
             return compressToBase64(pngBytes);
+        } catch (IllegalArgumentException e) {
+            return base64Png;
+        }
+    }
+
+    /**
+     * Compress a base64-encoded PNG screenshot with custom quality.
+     * Returns base64-encoded JPEG. Falls back to the original string if processing fails.
+     *
+     * @param imageQuality JPEG quality percentage (1-100)
+     */
+    public static String compressBase64(String base64Png, int imageQuality) {
+        try {
+            byte[] pngBytes = Base64.getDecoder().decode(base64Png);
+            return compressToBase64(pngBytes, imageQuality);
         } catch (IllegalArgumentException e) {
             return base64Png;
         }
@@ -68,6 +109,10 @@ public class ScreenshotUtil {
     }
 
     private static byte[] toJpeg(BufferedImage image) throws IOException {
+        return toJpeg(image, JPEG_QUALITY);
+    }
+
+    private static byte[] toJpeg(BufferedImage image, float quality) throws IOException {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         var writers = ImageIO.getImageWritersByFormatName("jpeg");
         if (!writers.hasNext()) {
@@ -76,7 +121,7 @@ public class ScreenshotUtil {
         var writer = writers.next();
         var param = writer.getDefaultWriteParam();
         param.setCompressionMode(javax.imageio.ImageWriteParam.MODE_EXPLICIT);
-        param.setCompressionQuality(JPEG_QUALITY);
+        param.setCompressionQuality(quality);
 
         // Convert to RGB if needed (JPEG doesn't support alpha)
         BufferedImage rgb = image;
