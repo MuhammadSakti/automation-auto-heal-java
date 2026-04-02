@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.1.1] - 2026-04-02
+
+### Added
+- **Screenshot in reports**: Failure screenshots are now embedded in the HTML report as collapsible images — click "Show Screenshot" to view what the page looked like when the failure occurred
+
+### Fixed
+- **Time card overflow**: Total Time card no longer overflows its container; formatted time uses a smaller font-size to fit within the card
+
+### Changed
+- `FailureContext.build()` no longer requires `screenshotBase64` — error-log-only analysis (without a screenshot) is now a valid use case
+- `HealRecord` has optional `screenshotBase64` field (omitted from JSON when absent)
+
 ## [1.1.0] - 2026-04-02
 
 ### Added
