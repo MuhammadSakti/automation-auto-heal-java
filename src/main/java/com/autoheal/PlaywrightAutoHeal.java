@@ -30,14 +30,14 @@ public class PlaywrightAutoHeal {
     private final ReportGenerator reportGenerator;
     private final SourceFixer sourceFixer;
 
-    private PlaywrightAutoHeal(AutoHealConfig config, Page page) {
+    private PlaywrightAutoHeal(AutoHealConfig config, Page page, String reportName) {
         this.config = config;
         this.page = page;
         this.aiProvider = AutoHealFactory.createProvider(config);
         this.records = Collections.synchronizedList(new ArrayList<>());
         HealCache cache = new HealCache(config.isCacheEnabled(), config.getReportPath());
         this.healer = new PlaywrightHealer(page, aiProvider, cache, records);
-        this.reportGenerator = new ReportGenerator(config.getReportPath());
+        this.reportGenerator = new ReportGenerator(config.getReportPath(), reportName);
         this.sourceFixer = new SourceFixer();
     }
 
@@ -86,11 +86,13 @@ public class PlaywrightAutoHeal {
                 .errorLog(errorLog)
                 .pageUrl(page.url())
                 .build();
-        return aiProvider.analyzeFailure(context);
+        return analyzeFailure(context);
     }
 
     public FailureAnalysis analyzeFailure(FailureContext context) {
-        return aiProvider.analyzeFailure(context);
+        FailureAnalysis result = aiProvider.analyzeFailure(context);
+        records.add(HealRecord.fromFailureAnalysis(result));
+        return result;
     }
 
     public void generateReport() {
@@ -130,6 +132,7 @@ public class PlaywrightAutoHeal {
     public static class Builder {
         private AutoHealConfig config;
         private Page page;
+        private String reportName;
 
         public Builder config(AutoHealConfig config) {
             this.config = config;
@@ -141,10 +144,15 @@ public class PlaywrightAutoHeal {
             return this;
         }
 
+        public Builder reportName(String reportName) {
+            this.reportName = reportName;
+            return this;
+        }
+
         public PlaywrightAutoHeal build() {
             if (config == null) config = AutoHealConfig.fromEnv();
             if (page == null) throw new IllegalStateException("Playwright Page must be set.");
-            return new PlaywrightAutoHeal(config, page);
+            return new PlaywrightAutoHeal(config, page, reportName);
         }
     }
 }

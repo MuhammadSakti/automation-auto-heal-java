@@ -35,14 +35,14 @@ public class SeleniumAutoHeal {
     private final ReportGenerator reportGenerator;
     private final SourceFixer sourceFixer;
 
-    private SeleniumAutoHeal(AutoHealConfig config, WebDriver driver) {
+    private SeleniumAutoHeal(AutoHealConfig config, WebDriver driver, String reportName) {
         this.config = config;
         this.driver = driver;
         this.aiProvider = AutoHealFactory.createProvider(config);
         this.records = Collections.synchronizedList(new ArrayList<>());
         HealCache cache = new HealCache(config.isCacheEnabled(), config.getReportPath());
         this.healer = new SeleniumHealer(driver, aiProvider, cache, records);
-        this.reportGenerator = new ReportGenerator(config.getReportPath());
+        this.reportGenerator = new ReportGenerator(config.getReportPath(), reportName);
         this.sourceFixer = new SourceFixer();
     }
 
@@ -66,11 +66,13 @@ public class SeleniumAutoHeal {
                 .errorLog(errorLog)
                 .pageUrl(driver.getCurrentUrl())
                 .build();
-        return aiProvider.analyzeFailure(context);
+        return analyzeFailure(context);
     }
 
     public FailureAnalysis analyzeFailure(FailureContext context) {
-        return aiProvider.analyzeFailure(context);
+        FailureAnalysis result = aiProvider.analyzeFailure(context);
+        records.add(HealRecord.fromFailureAnalysis(result));
+        return result;
     }
 
     public void generateReport() {
@@ -110,6 +112,7 @@ public class SeleniumAutoHeal {
     public static class Builder {
         private AutoHealConfig config;
         private WebDriver driver;
+        private String reportName;
 
         public Builder config(AutoHealConfig config) {
             this.config = config;
@@ -121,10 +124,15 @@ public class SeleniumAutoHeal {
             return this;
         }
 
+        public Builder reportName(String reportName) {
+            this.reportName = reportName;
+            return this;
+        }
+
         public SeleniumAutoHeal build() {
             if (config == null) config = AutoHealConfig.fromEnv();
             if (driver == null) throw new IllegalStateException("Selenium WebDriver must be set.");
-            return new SeleniumAutoHeal(config, driver);
+            return new SeleniumAutoHeal(config, driver, reportName);
         }
     }
 }
