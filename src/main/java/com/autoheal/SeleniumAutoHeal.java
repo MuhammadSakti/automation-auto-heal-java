@@ -7,8 +7,10 @@ import com.autoheal.cache.HealCache;
 import com.autoheal.config.AutoHealConfig;
 import com.autoheal.finder.SeleniumHealer;
 import com.autoheal.fixer.SourceFixer;
+import com.autoheal.reporter.ReportDashboardGenerator;
 import com.autoheal.reporter.HealRecord;
 import com.autoheal.reporter.ReportGenerator;
+import com.autoheal.reporter.RunContext;
 import org.openqa.selenium.By;
 import org.openqa.selenium.OutputType;
 import org.openqa.selenium.TakesScreenshot;
@@ -17,6 +19,7 @@ import org.openqa.selenium.WebElement;
 
 import com.autoheal.util.ScreenshotUtil;
 
+import java.nio.file.Path;
 import java.util.*;
 
 /**
@@ -40,8 +43,18 @@ public class SeleniumAutoHeal {
         this.records = Collections.synchronizedList(new ArrayList<>());
         HealCache cache = new HealCache(config.isCacheEnabled(), config.getReportPath());
         this.healer = new SeleniumHealer(driver, aiProvider, cache, records);
-        this.reportGenerator = new ReportGenerator(config.getReportPath(), reportName);
+        Path runFolder = RunContext.getOrCreate(config.getReportPath());
+        this.reportGenerator = new ReportGenerator(runFolder.toString(), reportName);
         this.sourceFixer = new SourceFixer();
+    }
+
+    /**
+     * Generate a cross-class dashboard aggregating every per-class report
+     * produced by the current run. Call from {@code @AfterSuite} so the
+     * dashboard is written once per test run.
+     */
+    public static void generateReportDashboard(AutoHealConfig config) {
+        ReportDashboardGenerator.generate(config.getReportPath());
     }
 
     /**

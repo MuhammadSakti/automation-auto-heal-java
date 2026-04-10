@@ -9,10 +9,13 @@ public class HealRecord {
 
     public enum Status { SUCCESS, FAILED }
 
+    public enum Kind { LOCATOR, FAILURE_ANALYSIS }
+
     private String originalSelector;
     private String actualSelector;
     private HealResult.Strategy strategy;
     private Status status;
+    private Kind kind = Kind.LOCATOR;
     private long timeMs;
     private int tokensUsed;
     private String reasoning;
@@ -85,12 +88,16 @@ public class HealRecord {
     public FailureAnalysis getFailureAnalysis() { return failureAnalysis; }
     public void setFailureAnalysis(FailureAnalysis failureAnalysis) { this.failureAnalysis = failureAnalysis; }
 
+    public Kind getKind() { return kind; }
+    public void setKind(Kind kind) { this.kind = kind; }
+
     public String getScreenshotBase64() { return screenshotBase64; }
     public void setScreenshotBase64(String screenshotBase64) { this.screenshotBase64 = screenshotBase64; }
 
     public static HealRecord fromFailureAnalysis(FailureAnalysis analysis) {
         HealRecord r = new HealRecord();
         r.status = Status.FAILED;
+        r.kind = Kind.FAILURE_ANALYSIS;
         r.reasoning = analysis.getSummary();
         r.tokensUsed = analysis.getTokensUsed();
         r.failureAnalysis = analysis;

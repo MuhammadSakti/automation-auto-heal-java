@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.3.0] - 2026-04-10
+
+### Added
+- **Cross-class dashboard**: `ReportDashboardGenerator` + `PlaywrightAutoHeal.generateReportDashboard(config)` / `SeleniumAutoHeal.generateReportDashboard(config)` — aggregate every per-class report produced during a run into one `dashboard.html` with failed-class %, locators checked, failed %, skipped count, total time, total tokens, and a per-class drill-down
+- **Dated run subfolders**: per-class HTML/JSON reports are now written to `reportPath/run_<timestamp>/` so a single run's artifacts stay grouped. `HealCache` still writes `.autoheal-cache.json` to the root of `reportPath` — unchanged
+- **`AUTOHEAL_RUN_ID` env var**: override the run folder name (recommended for forked Surefire JVMs so every fork shares one run folder)
+- **`HealRecord.Kind` enum** (`LOCATOR` / `FAILURE_ANALYSIS`): makes the "skipped" classification explicit instead of inferring it from `failureAnalysis != null`
+
+### Changed
+- **Report layout**: per-class reports moved from `reportPath/` to `reportPath/run_<timestamp>/`. Consumers that scrape the flat layout should migrate to the new subfolder structure
+
 ## [1.2.0] - 2026-04-02
 
 ### Added

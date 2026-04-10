@@ -2,6 +2,16 @@
 
 A Maven library that auto-heals broken locators in Playwright and Selenium tests using AI. When a locator breaks due to UI changes, the library captures the current page DOM, sends it to an AI provider with a human-readable description, and returns a working locator.
 
+## Why This Exists
+
+Broken locators remain the biggest pain point in UI test automation:
+
+- **40-60%** of test maintenance effort is spent fixing broken selectors
+- **25-40%** of automation engineers' time goes to maintenance — mostly locator fixes
+- **60-70%** of CI/CD test failures come from flaky tests, with locator breakage as a leading cause
+
+Modern frameworks have improved resilience, but the problem persists because UIs change frequently, teams lack `data-testid` discipline, and frontend frameworks generate unstable hashed class names and dynamic IDs.
+
 ## Features
 
 - **AI-Powered Healing** — Supports Claude, OpenAI, and Gemini as AI providers
@@ -33,7 +43,7 @@ Add the repository and dependency to your `pom.xml`:
     <dependency>
         <groupId>com.autoheal</groupId>
         <artifactId>auto-heal</artifactId>
-        <version>1.1.2</version>
+        <version>1.3.0</version>
     </dependency>
 </dependencies>
 ```
@@ -222,6 +232,43 @@ healer.find(By.id("old-3"), "Submit button");
 // Heal all collected locators in one AI call
 Map<String, WebElement> healed = healer.flushBatch();
 ```
+
+### Cross-Class Dashboard
+
+After a full suite run, aggregate every per-class report into a single dashboard showing failed-class %, locators checked, failed %, skipped (`analyzeFailure()`) count, total running time, and tokens used — with a drill-down button that opens each per-class HTML.
+
+Since every per-class call writes into the same `reportPath/run_<timestamp>/` folder for the lifetime of the JVM, generating the dashboard is a one-liner from `@AfterSuite`:
+
+```java
+@AfterSuite
+public void generateReportDashboard() {
+    PlaywrightAutoHeal.generateReportDashboard(AutoHealConfig.fromEnv());
+    // or: SeleniumAutoHeal.generateReportDashboard(AutoHealConfig.fromEnv());
+}
+```
+
+The resulting layout looks like:
+
+```
+autoheal-reports/
+├── .autoheal-cache.json                 # persistent cache, unchanged location
+└── run_20260410_103045_123/
+    ├── AutoHeal_HomePage_*.html
+    ├── AutoHeal_HomePage_*.json
+    ├── AutoHeal_InventoryPage_*.html
+    ├── AutoHeal_InventoryPage_*.json
+    └── dashboard.html                   # cross-class aggregate
+```
+
+**Forked JVMs**: if you run Surefire with `forkCount > 1`, each fork is a separate JVM and will create its own `run_*` folder by default. Set `AUTOHEAL_RUN_ID` so every fork shares one run folder:
+
+```bash
+mvn test -DAUTOHEAL_RUN_ID=ci-${BUILD_NUMBER}
+```
+
+**Migration note**: prior to 1.3.0, per-class reports were written directly under `reportPath/`. They now live under `reportPath/run_<timestamp>/`. The `.autoheal-cache.json` file is unchanged — still at the root of `reportPath`.
+
+**Known limitation**: un-flushed batch-mode pending heals are not automatically flushed on `finish()`. Call `flushBatch()` explicitly before `finish()` if you use batch mode.
 
 ## Healing Flow
 
