@@ -1,5 +1,8 @@
 package com.autoheal.ai;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.util.Collections;
 import java.util.List;
 
@@ -10,10 +13,17 @@ public class FailureAnalysis {
     private final List<String> suggestions;
     private final int tokensUsed;
 
-    public FailureAnalysis(String summary, List<String> possibleCauses, List<String> suggestions, int tokensUsed) {
+    @JsonCreator
+    public FailureAnalysis(
+            @JsonProperty("summary") String summary,
+            @JsonProperty("possibleCauses") List<String> possibleCauses,
+            @JsonProperty("suggestions") List<String> suggestions,
+            @JsonProperty("tokensUsed") int tokensUsed) {
         this.summary = summary;
-        this.possibleCauses = Collections.unmodifiableList(possibleCauses);
-        this.suggestions = Collections.unmodifiableList(suggestions);
+        this.possibleCauses = possibleCauses != null
+                ? Collections.unmodifiableList(possibleCauses) : Collections.emptyList();
+        this.suggestions = suggestions != null
+                ? Collections.unmodifiableList(suggestions) : Collections.emptyList();
         this.tokensUsed = tokensUsed;
     }
 

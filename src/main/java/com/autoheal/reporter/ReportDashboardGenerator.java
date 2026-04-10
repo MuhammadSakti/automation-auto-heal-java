@@ -168,7 +168,10 @@ public final class ReportDashboardGenerator {
                 rollup.failed++;
             }
         }
-        rollup.classFailed = rollup.failed > 0;
+        // A class is failed if any locator check failed OR any failure
+        // analysis was recorded (analyzeFailure is only called on explicit
+        // failures, including setup errors that prevent locator checks).
+        rollup.classFailed = rollup.failed > 0 || rollup.skipped > 0;
         return rollup;
     }
 

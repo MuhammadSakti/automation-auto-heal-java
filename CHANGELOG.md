@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.3.1] - 2026-04-10
+
+### Fixed
+- **Dashboard silently dropping failure-analysis reports**: `FailureAnalysis` had no Jackson creator, so any per-class JSON containing an `analyzeFailure()` record failed to deserialize and the whole class was skipped from the dashboard. Added `@JsonCreator`/`@JsonProperty` to `FailureAnalysis` with null-safe list handling
+- **Dashboard misclassifying setup-failure classes**: a class whose setup errored out (only failure-analysis records, zero locator checks) was shown as `passed`. `ReportDashboardGenerator` now marks a class failed when `failed > 0 || skipped > 0` — any explicit `analyzeFailure()` call signals a class failure
+
 ## [1.3.0] - 2026-04-10
 
 ### Added
