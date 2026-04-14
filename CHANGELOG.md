@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.3.3] - 2026-04-14
+
+### Changed
+- **Dashboard splits Passed vs Healed**: the single "Successful" count is now two cards — **Passed** (original locator worked) and **Healed** (AI-fixed or cached). Table columns and run summaries updated accordingly with a new "Heal %" metric
+- **Stack-trace source resolution**: `find(locator, description)` without a page object now resolves the caller's source file and line from the stack trace, enabling `SourceFixer` autofix for raw locator usage
+
 ## [1.3.2] - 2026-04-10
 
 ### Changed

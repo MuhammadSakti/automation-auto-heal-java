@@ -43,7 +43,7 @@ Add the repository and dependency to your `pom.xml`:
     <dependency>
         <groupId>com.autoheal</groupId>
         <artifactId>auto-heal</artifactId>
-        <version>1.3.2</version>
+        <version>1.3.3</version>
     </dependency>
 </dependencies>
 ```
