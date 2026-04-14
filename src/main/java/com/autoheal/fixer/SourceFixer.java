@@ -10,6 +10,8 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class SourceFixer {
 
@@ -70,6 +72,7 @@ public class SourceFixer {
             String oldSelector = extractSelectorFromOriginal(record.getOriginalSelector());
             String newSelector = record.getActualSelector();
 
+            // Try direct replacement first (works for page.locator("...") style)
             if (oldSelector != null && line.contains(oldSelector)) {
                 String newLine = line.replace(oldSelector, newSelector);
                 lines.set(lineIndex, newLine);
@@ -77,6 +80,33 @@ public class SourceFixer {
                 return new FixResult(record.getSourceFile(), record.getSourceLine(),
                         oldSelector, newSelector, true,
                         "Fixed at line " + record.getSourceLine());
+            }
+
+            // Handle Playwright getByTestId/byTestId pattern:
+            // original: "internal:attr=[data-testid="header"]" -> testId = "header"
+            // source:   byTestId("header") or getByTestId("header")
+            // new:      "[data-testid="app-header"]" -> newTestId = "app-header"
+            String oldTestId = extractTestId(record.getOriginalSelector());
+            if (oldTestId != null && line.contains(oldTestId)) {
+                String newTestId = extractTestId(newSelector);
+                if (newTestId != null) {
+                    // Replace just the test-id value inside the existing byTestId() call
+                    String newLine = line.replace(oldTestId, newTestId);
+                    lines.set(lineIndex, newLine);
+                    Files.write(path, lines, StandardCharsets.UTF_8);
+                    return new FixResult(record.getSourceFile(), record.getSourceLine(),
+                            oldTestId, newTestId, true,
+                            "Fixed test-id at line " + record.getSourceLine());
+                }
+                // New selector is not a test-id pattern — rewrite the whole method call
+                String newLine = rewriteTestIdCall(line, oldTestId, newSelector);
+                if (newLine != null) {
+                    lines.set(lineIndex, newLine);
+                    Files.write(path, lines, StandardCharsets.UTF_8);
+                    return new FixResult(record.getSourceFile(), record.getSourceLine(),
+                            oldTestId, newSelector, true,
+                            "Rewrote test-id call to locator at line " + record.getSourceLine());
+                }
             }
 
             return new FixResult(record.getSourceFile(), record.getSourceLine(),
@@ -107,5 +137,39 @@ public class SourceFixer {
             return original.substring(colonIndex + 1).trim();
         }
         return original;
+    }
+
+    // Pattern for data-testid in various formats:
+    //   Playwright internal: internal:attr=[data-testid="value"]
+    //   CSS selector:        [data-testid="value"]
+    private static final Pattern TEST_ID_PATTERN = Pattern.compile(
+            "data-testid=[\"']([^\"']+)[\"']");
+
+    /**
+     * Extracts the test-id value from Playwright's internal format or CSS selector.
+     * E.g., "internal:attr=[data-testid=\"header\"]" -> "header"
+     *        "[data-testid=\"app-header\"]"          -> "app-header"
+     */
+    private String extractTestId(String selector) {
+        if (selector == null) return null;
+        Matcher m = TEST_ID_PATTERN.matcher(selector);
+        return m.find() ? m.group(1) : null;
+    }
+
+    /**
+     * Rewrites a byTestId("old") or getByTestId("old") call to page.locator("newSelector").
+     * Returns the new line, or null if the pattern wasn't found.
+     */
+    private String rewriteTestIdCall(String line, String oldTestId, String newSelector) {
+        // Match byTestId("old") or getByTestId("old")
+        Pattern p = Pattern.compile("((?:get)?[Bb]yTestId\\s*\\()\\s*[\"']" +
+                Pattern.quote(oldTestId) + "[\"']\\s*\\)");
+        Matcher m = p.matcher(line);
+        if (m.find()) {
+            return line.substring(0, m.start()) +
+                    "page.locator(\"" + newSelector.replace("\"", "\\\"") + "\")" +
+                    line.substring(m.end());
+        }
+        return null;
     }
 }

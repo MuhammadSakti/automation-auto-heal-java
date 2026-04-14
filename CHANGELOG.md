@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.3.4] - 2026-04-14
+
+### Fixed
+- **SourceFixer handles Playwright getByTestId/byTestId locators**: `extractSelectorFromOriginal` now extracts the test-id value from Playwright's `internal:attr=[data-testid="..."]` format and matches it against `byTestId("...")` calls in source. When the healed selector is also a test-id, only the value is replaced; otherwise the call is rewritten to `page.locator("...")`
+
 ## [1.3.3] - 2026-04-14
 
 ### Changed
