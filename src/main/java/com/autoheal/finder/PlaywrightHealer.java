@@ -42,7 +42,10 @@ public class PlaywrightHealer {
     }
 
     public Locator find(Locator original, String description) {
-        return find(original, description, null, -1);
+        SourceInfo info = LocatorSourceResolver.resolveFromStack();
+        String sourceFile = info != null ? info.filePath() : null;
+        int sourceLine = info != null ? info.lineNumber() : -1;
+        return find(original, description, sourceFile, sourceLine);
     }
 
     public Locator find(Locator original, String description, Object pageObject) {

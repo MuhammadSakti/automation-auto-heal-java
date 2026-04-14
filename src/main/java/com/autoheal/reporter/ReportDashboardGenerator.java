@@ -1,5 +1,6 @@
 package com.autoheal.reporter;
 
+import com.autoheal.finder.HealResult;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -155,12 +156,16 @@ public final class ReportDashboardGenerator {
             if (isSkipped(r)) {
                 rollup.skipped++;
             } else if (r.getStatus() == HealRecord.Status.SUCCESS) {
-                rollup.successful++;
+                if (r.getStrategy() == HealResult.Strategy.ORIGINAL) {
+                    rollup.passed++;
+                } else {
+                    rollup.healed++;
+                }
             } else {
                 rollup.failed++;
             }
         }
-        rollup.classFailed = rollup.failed > 0 || rollup.skipped > 0;
+        rollup.classFailed = rollup.failed > 0 || rollup.healed > 0 || rollup.skipped > 0;
         return rollup;
     }
 
@@ -185,13 +190,14 @@ public final class ReportDashboardGenerator {
         for (ClassRollup r : rollups) {
             g.totalClasses++;
             if (r.classFailed) g.failedClasses++;
-            g.totalSuccess += r.successful;
+            g.totalPassed += r.passed;
+            g.totalHealed += r.healed;
             g.totalFailed += r.failed;
             g.totalSkipped += r.skipped;
             g.totalTimeMs += r.totalTimeMs;
             g.totalTokens += r.totalTokens;
         }
-        g.totalLocatorsChecked = g.totalSuccess + g.totalFailed;
+        g.totalLocatorsChecked = g.totalPassed + g.totalHealed + g.totalFailed;
         g.totalRecords = g.totalLocatorsChecked + g.totalSkipped;
         return g;
     }
@@ -218,7 +224,9 @@ public final class ReportDashboardGenerator {
                         .replace("{{totalFailed}}", String.valueOf(g.totalFailed))
                         .replace("{{failedLocatorsPct}}", pct(g.totalFailed, g.totalLocatorsChecked))
                         .replace("{{totalSkipped}}", String.valueOf(g.totalSkipped))
-                        .replace("{{totalSuccess}}", String.valueOf(g.totalSuccess))
+                        .replace("{{totalPassed}}", String.valueOf(g.totalPassed))
+                        .replace("{{totalHealed}}", String.valueOf(g.totalHealed))
+                        .replace("{{healPct}}", pct(g.totalHealed, g.totalHealed + g.totalFailed))
                         .replace("{{totalTime}}", ReportGenerator.formatTime(g.totalTimeMs))
                         .replace("{{totalTokens}}", String.valueOf(g.totalTokens))
                         .replace("{{runSections}}", runSections);
@@ -242,6 +250,7 @@ public final class ReportDashboardGenerator {
             sb.append("<span class=\"run-stats\">");
             sb.append(runStats.totalClasses).append(" classes &middot; ");
             sb.append(runStats.totalLocatorsChecked).append(" checked &middot; ");
+            sb.append("<span style=\"color:#e67e22\">").append(runStats.totalHealed).append(" healed</span> &middot; ");
             sb.append("<span style=\"color:#e74c3c\">").append(runStats.totalFailed).append(" failed</span> &middot; ");
             sb.append(runStats.totalSkipped).append(" skipped &middot; ");
             sb.append(ReportGenerator.formatTime(runStats.totalTimeMs));
@@ -249,8 +258,8 @@ public final class ReportDashboardGenerator {
             sb.append("</summary>\n");
 
             sb.append("<div class=\"table-wrapper\">\n<table>\n<thead><tr>");
-            sb.append("<th>Class</th><th>Timestamp</th><th>Checked</th><th>Failed</th>");
-            sb.append("<th>Skipped</th><th>Success %</th><th>Time</th><th>Tokens</th><th>Details</th>");
+            sb.append("<th>Class</th><th>Timestamp</th><th>Checked</th><th>Passed</th><th>Healed</th><th>Failed</th>");
+            sb.append("<th>Skipped</th><th>Heal %</th><th>Time</th><th>Tokens</th><th>Details</th>");
             sb.append("</tr></thead>\n<tbody>\n");
             sb.append(buildClassRows(run.classes));
             sb.append("</tbody>\n</table>\n</div>\n");
@@ -262,16 +271,19 @@ public final class ReportDashboardGenerator {
     private static String buildClassRows(List<ClassRollup> rollups) {
         StringBuilder sb = new StringBuilder();
         for (ClassRollup r : rollups) {
-            long checked = r.successful + r.failed;
-            String successPct = pct(r.successful, checked);
+            long checked = r.passed + r.healed + r.failed;
+            long healDenom = r.healed + r.failed;
+            String healPct = healDenom > 0 ? pct(r.healed, healDenom) + "%" : "-";
             String cls = r.classFailed ? "failed" : "passed";
             sb.append("<tr class=\"").append(cls).append("\">");
             sb.append("<td>").append(escapeHtml(r.reportName)).append("</td>");
             sb.append("<td>").append(escapeHtml(r.displayTimestamp)).append("</td>");
             sb.append("<td>").append(checked).append("</td>");
+            sb.append("<td>").append(r.passed).append("</td>");
+            sb.append("<td>").append(r.healed).append("</td>");
             sb.append("<td>").append(r.failed).append("</td>");
             sb.append("<td>").append(r.skipped).append("</td>");
-            sb.append("<td>").append(successPct).append("%</td>");
+            sb.append("<td>").append(healPct).append("</td>");
             sb.append("<td>").append(ReportGenerator.formatTime(r.totalTimeMs)).append("</td>");
             sb.append("<td>").append(r.totalTokens).append("</td>");
             sb.append("<td><a class=\"btn-details\" href=\"")
@@ -290,7 +302,7 @@ public final class ReportDashboardGenerator {
         sb.append("<title>AutoHeal Dashboard - ").append(displayTs).append("</title>");
         sb.append("<style>body{font-family:sans-serif;margin:20px;}table{width:100%;border-collapse:collapse;}");
         sb.append("th,td{padding:8px;border-bottom:1px solid #ccc;text-align:left;}th{background:#1a1a2e;color:#fff;}");
-        sb.append("tr.failed td:nth-child(4){color:#e74c3c;font-weight:bold;}");
+        sb.append("tr.failed td:nth-child(6){color:#e74c3c;font-weight:bold;}");
         sb.append(".btn-details{padding:4px 8px;background:#1a1a2e;color:#fff;text-decoration:none;border-radius:4px;}");
         sb.append(".run-group{margin-bottom:16px;}");
         sb.append(".run-header{background:#e8eaf0;padding:10px 14px;border-radius:8px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;}");
@@ -304,8 +316,9 @@ public final class ReportDashboardGenerator {
         sb.append("<li>Total Classes: ").append(g.totalClasses).append("</li>");
         sb.append("<li>Failed Classes: ").append(g.failedClasses).append(" (").append(pct(g.failedClasses, g.totalClasses)).append("%)</li>");
         sb.append("<li>Locators Checked: ").append(g.totalLocatorsChecked).append("</li>");
+        sb.append("<li>Passed: ").append(g.totalPassed).append("</li>");
+        sb.append("<li>Healed: ").append(g.totalHealed).append("</li>");
         sb.append("<li>Failed: ").append(g.totalFailed).append(" (").append(pct(g.totalFailed, g.totalLocatorsChecked)).append("%)</li>");
-        sb.append("<li>Successful: ").append(g.totalSuccess).append("</li>");
         sb.append("<li>Skipped: ").append(g.totalSkipped).append("</li>");
         sb.append("<li>Total Time: ").append(ReportGenerator.formatTime(g.totalTimeMs)).append("</li>");
         sb.append("<li>Tokens Used: ").append(g.totalTokens).append("</li>");
@@ -336,7 +349,8 @@ public final class ReportDashboardGenerator {
         String displayTimestamp;
         String htmlFileName;
         String relativePrefix = "";
-        long successful;
+        long passed;
+        long healed;
         long failed;
         long skipped;
         long totalTimeMs;
@@ -358,7 +372,8 @@ public final class ReportDashboardGenerator {
         long totalClasses;
         long failedClasses;
         long totalLocatorsChecked;
-        long totalSuccess;
+        long totalPassed;
+        long totalHealed;
         long totalFailed;
         long totalSkipped;
         long totalTimeMs;

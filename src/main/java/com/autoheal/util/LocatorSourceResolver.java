@@ -16,6 +16,50 @@ public class LocatorSourceResolver {
     public record SourceInfo(String filePath, int lineNumber, String fieldName) {}
 
     /**
+     * Resolves source info from the call stack by finding the first caller
+     * outside the com.autoheal package. Works for raw locator usage without
+     * a page object.
+     *
+     * @return source info, or null if unable to resolve
+     */
+    public static SourceInfo resolveFromStack() {
+        StackTraceElement[] stack = Thread.currentThread().getStackTrace();
+        for (StackTraceElement frame : stack) {
+            String className = frame.getClassName();
+            if (className.startsWith("com.autoheal.") || className.startsWith("java.lang.")) continue;
+            String filePath = findSourceFile(className);
+            int lineNumber = frame.getLineNumber();
+            if (filePath != null && lineNumber > 0) {
+                return new SourceInfo(filePath, lineNumber, null);
+            }
+        }
+        return null;
+    }
+
+    private static String findSourceFile(String fullClassName) {
+        // Handle inner classes: use the outermost class for file lookup
+        String outerClass = fullClassName.contains("$")
+                ? fullClassName.substring(0, fullClassName.indexOf('$'))
+                : fullClassName;
+        String relativePath = outerClass.replace('.', '/') + ".java";
+        String userDir = System.getProperty("user.dir");
+
+        String[] sourceRoots = {
+                "src/test/java/",
+                "src/main/java/",
+                "src/"
+        };
+
+        for (String root : sourceRoots) {
+            File file = new File(userDir, root + relativePath);
+            if (file.exists()) {
+                return file.getAbsolutePath();
+            }
+        }
+        return null;
+    }
+
+    /**
      * Finds which field in the page object (or its superclasses) holds the given locator reference,
      * then resolves the source file path and line number where that field is assigned.
      *
@@ -53,26 +97,8 @@ public class LocatorSourceResolver {
         return null;
     }
 
-    /**
-     * Finds the .java source file for a class by searching common Maven/Gradle source roots.
-     */
     private static String findSourceFile(Class<?> clazz) {
-        String relativePath = clazz.getName().replace('.', '/') + ".java";
-        String userDir = System.getProperty("user.dir");
-
-        String[] sourceRoots = {
-                "src/test/java/",
-                "src/main/java/",
-                "src/"
-        };
-
-        for (String root : sourceRoots) {
-            File file = new File(userDir, root + relativePath);
-            if (file.exists()) {
-                return file.getAbsolutePath();
-            }
-        }
-        return null;
+        return findSourceFile(clazz.getName());
     }
 
     /**

@@ -89,7 +89,8 @@
             white-space: nowrap;
         }
         tr.passed td:nth-child(4) { color: #27ae60; font-weight: 600; }
-        tr.failed td:nth-child(4) { color: #e74c3c; font-weight: 600; }
+        tr.failed td:nth-child(5) { color: #e67e22; font-weight: 600; }
+        tr.failed td:nth-child(6) { color: #e74c3c; font-weight: 600; }
         tr:hover td { background: #f8f9fb; }
         .btn-details {
             display: inline-block;
@@ -129,8 +130,14 @@
                 <div class="label">Locators Checked</div>
             </div>
             <div class="card green">
-                <div class="value">{{totalSuccess}}</div>
-                <div class="label">Successful</div>
+                <div class="value">{{totalPassed}}</div>
+                <div class="label">Passed</div>
+                <div class="sub">original worked</div>
+            </div>
+            <div class="card orange">
+                <div class="value">{{totalHealed}}</div>
+                <div class="label">Healed</div>
+                <div class="sub">{{healPct}}% heal rate</div>
             </div>
             <div class="card red">
                 <div class="value">{{totalFailed}}</div>
