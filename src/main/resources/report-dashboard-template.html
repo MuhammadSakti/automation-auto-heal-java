@@ -41,11 +41,31 @@
         .card.orange .value { color: #e67e22; }
         .card.purple .value { color: #8e44ad; }
         .card.gray .value { color: #7f8c8d; }
+        .run-group { margin-bottom: 16px; }
+        .run-header {
+            background: #e8eaf0;
+            padding: 10px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 14px;
+            user-select: none;
+        }
+        .run-header:hover { background: #dde0e8; }
+        details.run-group[open] .run-header { border-radius: 8px 8px 0 0; }
+        .run-name { font-weight: 600; }
+        .run-stats { color: #666; font-size: 13px; }
         .table-wrapper {
             background: #fff;
-            border-radius: 10px;
+            border-radius: 0 0 10px 10px;
             box-shadow: 0 1px 3px rgba(0,0,0,0.08);
             overflow-x: auto;
+        }
+        details.run-group:not([open]) + details.run-group .table-wrapper,
+        details.run-group:first-child .table-wrapper {
+            border-radius: 0 0 10px 10px;
         }
         table { width: 100%; border-collapse: collapse; }
         th {
@@ -92,7 +112,7 @@
 <body>
     <div class="container">
         <h1>AutoHeal Dashboard</h1>
-        <p class="subtitle">Generated: {{timestamp}} &middot; Run: <code>{{runFolder}}</code></p>
+        <p class="subtitle">Generated: {{timestamp}} &middot; Latest: <code>{{latestRun}}</code> &middot; Runs: {{totalRuns}}</p>
 
         <div class="cards">
             <div class="card">
@@ -131,26 +151,7 @@
             </div>
         </div>
 
-        <div class="table-wrapper">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Class</th>
-                        <th>Timestamp</th>
-                        <th>Checked</th>
-                        <th>Failed</th>
-                        <th>Skipped</th>
-                        <th>Success %</th>
-                        <th>Time</th>
-                        <th>Tokens</th>
-                        <th>Details</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {{classRows}}
-                </tbody>
-            </table>
-        </div>
+        {{runSections}}
     </div>
 </body>
 </html>

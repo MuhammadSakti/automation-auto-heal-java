@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.2] - 2026-04-10
+
+### Changed
+- **Dashboard moved to reportPath root**: `dashboard.html` is now written to the root of `reportPath` (e.g. `target/autoheal-reports/dashboard.html`) instead of inside a single `run_*` subfolder
+- **Dashboard aggregates all runs**: scans every `run_*` subdirectory and renders them as collapsible groups (newest first, expanded by default). Previous runs remain visible unless manually cleared
+- **Relative detail links**: "View Details" links use relative paths (e.g. `run_20260410_103955_732/AutoHeal_HomePage_*.html`) so they resolve correctly from the root
+
 ## [1.3.1] - 2026-04-10
 
 ### Fixed

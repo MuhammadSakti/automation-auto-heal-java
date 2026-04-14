@@ -43,7 +43,7 @@ Add the repository and dependency to your `pom.xml`:
     <dependency>
         <groupId>com.autoheal</groupId>
         <artifactId>auto-heal</artifactId>
-        <version>1.3.1</version>
+        <version>1.3.2</version>
     </dependency>
 </dependencies>
 ```
@@ -252,12 +252,15 @@ The resulting layout looks like:
 ```
 autoheal-reports/
 ├── .autoheal-cache.json                 # persistent cache, unchanged location
-└── run_20260410_103045_123/
-    ├── AutoHeal_HomePage_*.html
-    ├── AutoHeal_HomePage_*.json
-    ├── AutoHeal_InventoryPage_*.html
-    ├── AutoHeal_InventoryPage_*.json
-    └── dashboard.html                   # cross-class aggregate
+├── dashboard.html                       # aggregates ALL run_* folders
+├── run_20260410_103045_123/
+│   ├── AutoHeal_HomePage_*.html
+│   ├── AutoHeal_HomePage_*.json
+│   ├── AutoHeal_InventoryPage_*.html
+│   └── AutoHeal_InventoryPage_*.json
+└── run_20260411_150000_000/
+    ├── AutoHeal_LoginPage_*.html
+    └── AutoHeal_LoginPage_*.json
 ```
 
 **Forked JVMs**: if you run Surefire with `forkCount > 1`, each fork is a separate JVM and will create its own `run_*` folder by default. Set `AUTOHEAL_RUN_ID` so every fork shares one run folder:
