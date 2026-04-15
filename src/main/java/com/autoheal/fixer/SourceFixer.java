@@ -50,74 +50,76 @@ public class SourceFixer {
     }
 
     private FixResult fixRecord(HealRecord record) {
-        Path path = Paths.get(record.getSourceFile());
+        String sourceFile = record.getSourceFile();
+        int sourceLine = record.getSourceLine();
+        String originalSelector = record.getOriginalSelector();
+        String newSelector = record.getActualSelector();
+        Path path = Paths.get(sourceFile);
 
         if (!Files.exists(path)) {
-            return new FixResult(record.getSourceFile(), record.getSourceLine(),
-                    record.getOriginalSelector(), record.getActualSelector(),
-                    false, "Source file not found: " + record.getSourceFile());
+            return skip(sourceFile, sourceLine, originalSelector, newSelector,
+                    "Source file not found: " + sourceFile);
+        }
+
+        List<String> lines;
+        try {
+            lines = Files.readAllLines(path, StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            return skip(sourceFile, sourceLine, originalSelector, newSelector,
+                    "IO error: " + e.getMessage());
+        }
+
+        int lineIndex = sourceLine - 1;
+        if (lineIndex < 0 || lineIndex >= lines.size()) {
+            return skip(sourceFile, sourceLine, originalSelector, newSelector,
+                    "Line number out of range: " + sourceLine);
+        }
+
+        String line = lines.get(lineIndex);
+        String newLine = tryReplaceLine(line, originalSelector, newSelector);
+
+        if (newLine == null) {
+            return skip(sourceFile, sourceLine, originalSelector, newSelector,
+                    "Could not find original selector in source line");
         }
 
         try {
-            List<String> lines = Files.readAllLines(path, StandardCharsets.UTF_8);
-            int lineIndex = record.getSourceLine() - 1;
-
-            if (lineIndex < 0 || lineIndex >= lines.size()) {
-                return new FixResult(record.getSourceFile(), record.getSourceLine(),
-                        record.getOriginalSelector(), record.getActualSelector(),
-                        false, "Line number out of range: " + record.getSourceLine());
-            }
-
-            String line = lines.get(lineIndex);
-            String oldSelector = extractSelectorFromOriginal(record.getOriginalSelector());
-            String newSelector = record.getActualSelector();
-
-            // Try direct replacement first (works for page.locator("...") style)
-            if (oldSelector != null && line.contains(oldSelector)) {
-                String newLine = line.replace(oldSelector, newSelector);
-                lines.set(lineIndex, newLine);
-                Files.write(path, lines, StandardCharsets.UTF_8);
-                return new FixResult(record.getSourceFile(), record.getSourceLine(),
-                        oldSelector, newSelector, true,
-                        "Fixed at line " + record.getSourceLine());
-            }
-
-            // Handle Playwright getByTestId/byTestId pattern:
-            // original: "internal:attr=[data-testid="header"]" -> testId = "header"
-            // source:   byTestId("header") or getByTestId("header")
-            // new:      "[data-testid="app-header"]" -> newTestId = "app-header"
-            String oldTestId = extractTestId(record.getOriginalSelector());
-            if (oldTestId != null && line.contains(oldTestId)) {
-                String newTestId = extractTestId(newSelector);
-                if (newTestId != null) {
-                    // Replace just the test-id value inside the existing byTestId() call
-                    String newLine = line.replace(oldTestId, newTestId);
-                    lines.set(lineIndex, newLine);
-                    Files.write(path, lines, StandardCharsets.UTF_8);
-                    return new FixResult(record.getSourceFile(), record.getSourceLine(),
-                            oldTestId, newTestId, true,
-                            "Fixed test-id at line " + record.getSourceLine());
-                }
-                // New selector is not a test-id pattern — rewrite the whole method call
-                String newLine = rewriteTestIdCall(line, oldTestId, newSelector);
-                if (newLine != null) {
-                    lines.set(lineIndex, newLine);
-                    Files.write(path, lines, StandardCharsets.UTF_8);
-                    return new FixResult(record.getSourceFile(), record.getSourceLine(),
-                            oldTestId, newSelector, true,
-                            "Rewrote test-id call to locator at line " + record.getSourceLine());
-                }
-            }
-
-            return new FixResult(record.getSourceFile(), record.getSourceLine(),
-                    record.getOriginalSelector(), record.getActualSelector(),
-                    false, "Could not find original selector in source line");
-
+            lines.set(lineIndex, newLine);
+            Files.write(path, lines, StandardCharsets.UTF_8);
         } catch (IOException e) {
-            return new FixResult(record.getSourceFile(), record.getSourceLine(),
-                    record.getOriginalSelector(), record.getActualSelector(),
-                    false, "IO error: " + e.getMessage());
+            return skip(sourceFile, sourceLine, originalSelector, newSelector,
+                    "IO error writing file: " + e.getMessage());
         }
+
+        return new FixResult(sourceFile, sourceLine, originalSelector, newSelector, true,
+                "Fixed at line " + sourceLine);
+    }
+
+    private String tryReplaceLine(String line, String originalSelector, String newSelector) {
+        // 1. Direct replacement (works for page.locator("...") style)
+        String oldSelector = extractSelectorFromOriginal(originalSelector);
+        if (oldSelector != null && line.contains(oldSelector)) {
+            return line.replace(oldSelector, newSelector);
+        }
+
+        // 2. Playwright getByTestId/byTestId pattern
+        String oldTestId = extractTestId(originalSelector);
+        if (oldTestId == null) return null;
+
+        // 2a. Both old and new are test-ids — swap just the value
+        String newTestId = extractTestId(newSelector);
+        if (newTestId != null) {
+            String result = replaceTestIdInCall(line, oldTestId, newTestId);
+            if (result != null) return result;
+        }
+
+        // 2b. New selector is not a test-id — rewrite the whole method call
+        return rewriteTestIdCall(line, oldTestId, newSelector);
+    }
+
+    private FixResult skip(String sourceFile, int sourceLine,
+                           String oldSelector, String newSelector, String message) {
+        return new FixResult(sourceFile, sourceLine, oldSelector, newSelector, false, message);
     }
 
     /**
@@ -157,18 +159,46 @@ public class SourceFixer {
     }
 
     /**
-     * Rewrites a byTestId("old") or getByTestId("old") call to page.locator("newSelector").
+     * Replaces the test-id value inside a byTestId("old")/getByTestId("old") call,
+     * only touching the string literal — not variable names or other text on the line.
      * Returns the new line, or null if the pattern wasn't found.
      */
-    private String rewriteTestIdCall(String line, String oldTestId, String newSelector) {
-        // Match byTestId("old") or getByTestId("old")
-        Pattern p = Pattern.compile("((?:get)?[Bb]yTestId\\s*\\()\\s*[\"']" +
-                Pattern.quote(oldTestId) + "[\"']\\s*\\)");
+    private String replaceTestIdInCall(String line, String oldTestId, String newTestId) {
+        Pattern p = Pattern.compile("((?:get)?[Bb]yTestId\\s*\\(\\s*[\"'])" +
+                Pattern.quote(oldTestId) + "([\"']\\s*\\))");
         Matcher m = p.matcher(line);
         if (m.find()) {
             return line.substring(0, m.start()) +
-                    "page.locator(\"" + newSelector.replace("\"", "\\\"") + "\")" +
+                    m.group(1) + newTestId + m.group(2) +
                     line.substring(m.end());
+        }
+        return null;
+    }
+
+    /**
+     * Rewrites a byTestId("old") or getByTestId("old") call to obj.locator("newSelector"),
+     * preserving the original object reference (e.g. page, page1, pageInventory).
+     * Returns the new line, or null if the pattern wasn't found.
+     */
+    private String rewriteTestIdCall(String line, String oldTestId, String newSelector) {
+        // Match obj.getByTestId("old") or obj.byTestId("old") — capture the object name
+        Pattern p = Pattern.compile("(\\w+)\\s*\\.\\s*(?:get)?[Bb]yTestId\\s*\\(\\s*[\"']" +
+                Pattern.quote(oldTestId) + "[\"']\\s*\\)");
+        Matcher m = p.matcher(line);
+        if (m.find()) {
+            String objName = m.group(1);
+            return line.substring(0, m.start()) +
+                    objName + ".locator(\"" + newSelector.replace("\"", "\\\"") + "\")" +
+                    line.substring(m.end());
+        }
+        // Fallback: standalone byTestId("old") call (no object prefix, e.g. helper method)
+        Pattern p2 = Pattern.compile("(?:get)?[Bb]yTestId\\s*\\(\\s*[\"']" +
+                Pattern.quote(oldTestId) + "[\"']\\s*\\)");
+        Matcher m2 = p2.matcher(line);
+        if (m2.find()) {
+            return line.substring(0, m2.start()) +
+                    "locator(\"" + newSelector.replace("\"", "\\\"") + "\")" +
+                    line.substring(m2.end());
         }
         return null;
     }

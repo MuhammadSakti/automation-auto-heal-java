@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.3.5] - 2026-04-15
+
+### Fixed
+- **SourceFixer preserves page variable name**: `rewriteTestIdCall` now captures the object reference (e.g. `page`, `page1`, `pageInventory`) instead of hardcoding `page.locator(...)`
+- **SourceFixer no longer corrupts variable names**: test-id replacement now targets only the string literal inside `byTestId()`/`getByTestId()` calls via regex, preventing `this.header` from becoming `this.app-header`
+
+### Changed
+- **Refactored SourceFixer to remove arrow antipattern**: extracted `tryReplaceLine()` for replacement logic and `skip()` helper, flattening nested if/try blocks in `fixRecord()`
+
 ## [1.3.4] - 2026-04-14
 
 ### Fixed
