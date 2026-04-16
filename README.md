@@ -43,7 +43,7 @@ Add the repository and dependency to your `pom.xml`:
     <dependency>
         <groupId>com.autoheal</groupId>
         <artifactId>auto-heal</artifactId>
-        <version>1.3.5</version>
+        <version>1.4.0</version>
     </dependency>
 </dependencies>
 ```
@@ -61,16 +61,25 @@ Add the repository and dependency to your `pom.xml`:
 
 ## Configuration
 
-Create a `.env` file in your project root or set environment variables:
+Create `src/test/resources/autoheal.properties` in your project:
 
-```env
-AUTOHEAL_AI_PROVIDER=claude          # claude / openai / gemini
-AUTOHEAL_AI_API_KEY=your-api-key
-AUTOHEAL_AI_MODEL=claude-sonnet-4-6  # or gpt-4o, gemini-2.0-flash
-AUTOHEAL_REPORT_PATH=./autoheal-reports/
-AUTOHEAL_AUTOFIX=off                 # off / auto / manual
-AUTOHEAL_CACHE_ENABLED=true
+```properties
+# src/test/resources/autoheal.properties
+autoheal.ai.provider=claude
+autoheal.ai.api-key=your-api-key
+autoheal.ai.model=claude-sonnet-4-6
+autoheal.report-path=./autoheal-reports/
+autoheal.autofix=off
+autoheal.cache-enabled=true
 ```
+
+Environment variables (`AUTOHEAL_AI_PROVIDER`, `AUTOHEAL_AI_API_KEY`, etc.) and `-D` system properties (`-Dautoheal.ai.provider=openai`) also work and take precedence over the properties file.
+
+**Priority order** (highest to lowest):
+1. Environment variables (`AUTOHEAL_AI_PROVIDER`)
+2. System properties (`-Dautoheal.ai.provider`)
+3. `autoheal.properties` on classpath
+4. Built-in defaults
 
 Or configure programmatically:
 
@@ -298,7 +307,7 @@ src/main/java/com/autoheal/
 ├── SeleniumAutoHeal.java      # Selenium entry point with builder
 ├── AutoHealFactory.java       # AI provider factory
 ├── config/
-│   └── AutoHealConfig.java    # Configuration (env / .env / builder)
+│   └── AutoHealConfig.java    # Configuration (env / properties / builder)
 ├── ai/
 │   ├── AIProvider.java        # Provider interface
 │   ├── AIResponse.java        # Response DTO

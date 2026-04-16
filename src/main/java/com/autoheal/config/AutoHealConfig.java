@@ -1,6 +1,8 @@
 package com.autoheal.config;
 
-import io.github.cdimascio.dotenv.Dotenv;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.Properties;
 
 public class AutoHealConfig {
 
@@ -17,50 +19,55 @@ public class AutoHealConfig {
     private AutoHealConfig() {}
 
     public static AutoHealConfig fromEnv() {
-        Dotenv dotenv;
-        try {
-            dotenv = Dotenv.configure().ignoreIfMissing().load();
-        } catch (Exception e) {
-            dotenv = null;
+        Properties props = new Properties();
+        try (InputStream is = AutoHealConfig.class.getClassLoader()
+                .getResourceAsStream("autoheal.properties")) {
+            if (is != null) {
+                props.load(is);
+            }
+        } catch (IOException e) {
+            // ignore — properties file is optional
         }
 
         AutoHealConfig config = new AutoHealConfig();
-        config.aiProvider = parseProvider(resolve(dotenv, "AUTOHEAL_AI_PROVIDER", "claude"));
-        config.aiApiKey = resolveApiKey(dotenv, config.aiProvider);
-        config.aiModel = resolve(dotenv, "AUTOHEAL_AI_MODEL", defaultModel(config.aiProvider));
-        config.reportPath = resolve(dotenv, "AUTOHEAL_REPORT_PATH", "./autoheal-reports/");
-        config.autoFix = parseAutoFix(resolve(dotenv, "AUTOHEAL_AUTOFIX", "off"));
-        config.cacheEnabled = Boolean.parseBoolean(resolve(dotenv, "AUTOHEAL_CACHE_ENABLED", "true"));
+        config.aiProvider = parseProvider(resolve(props, "AUTOHEAL_AI_PROVIDER", "autoheal.ai.provider", "claude"));
+        config.aiApiKey = resolveApiKey(props, config.aiProvider);
+        config.aiModel = resolve(props, "AUTOHEAL_AI_MODEL", "autoheal.ai.model", defaultModel(config.aiProvider));
+        config.reportPath = resolve(props, "AUTOHEAL_REPORT_PATH", "autoheal.report-path", "./autoheal-reports/");
+        config.autoFix = parseAutoFix(resolve(props, "AUTOHEAL_AUTOFIX", "autoheal.autofix", "off"));
+        config.cacheEnabled = Boolean.parseBoolean(resolve(props, "AUTOHEAL_CACHE_ENABLED", "autoheal.cache-enabled", "true"));
         return config;
     }
 
-    private static String resolve(Dotenv dotenv, String key, String defaultValue) {
-        String sysEnv = System.getenv(key);
+    private static String resolve(Properties props, String envKey, String propKey, String defaultValue) {
+        String sysEnv = System.getenv(envKey);
         if (sysEnv != null && !sysEnv.isEmpty()) return sysEnv;
-        if (dotenv != null) {
-            String dotenvVal = dotenv.get(key);
-            if (dotenvVal != null && !dotenvVal.isEmpty()) return dotenvVal;
-        }
+        String sysProp = System.getProperty(propKey);
+        if (sysProp != null && !sysProp.isEmpty()) return sysProp;
+        String val = props.getProperty(propKey);
+        if (val != null && !val.isEmpty()) return val;
+        val = props.getProperty(envKey);
+        if (val != null && !val.isEmpty()) return val;
         return defaultValue;
     }
 
-    private static String resolveApiKey(Dotenv dotenv, AiProvider provider) {
+    private static String resolveApiKey(Properties props, AiProvider provider) {
         // Try generic key first
-        String key = resolve(dotenv, "AUTOHEAL_AI_API_KEY", "");
+        String key = resolve(props, "AUTOHEAL_AI_API_KEY", "autoheal.ai.api-key", "");
         if (!key.isEmpty()) return key;
 
         // Fall back to provider-specific keys
         switch (provider) {
             case CLAUDE:
-                key = resolve(dotenv, "CLAUDE_API_KEY", "");
+                key = resolve(props, "CLAUDE_API_KEY", "claude.api-key", "");
                 if (!key.isEmpty()) return key;
-                return resolve(dotenv, "ANTHROPIC_API_KEY", "");
+                return resolve(props, "ANTHROPIC_API_KEY", "anthropic.api-key", "");
             case OPENAI:
-                return resolve(dotenv, "OPENAI_API_KEY", "");
+                return resolve(props, "OPENAI_API_KEY", "openai.api-key", "");
             case GEMINI:
-                key = resolve(dotenv, "GEMINI_API_KEY", "");
+                key = resolve(props, "GEMINI_API_KEY", "gemini.api-key", "");
                 if (!key.isEmpty()) return key;
-                return resolve(dotenv, "GOOGLE_API_KEY", "");
+                return resolve(props, "GOOGLE_API_KEY", "google.api-key", "");
             default:
                 return "";
         }

@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.4.0] - 2026-04-16
+
+### Changed
+- **Replace dotenv-java with autoheal.properties**: configuration is now loaded from a standard Java properties file (`autoheal.properties` on classpath) instead of `.env` via `dotenv-java`. The `dotenv-java` dependency has been removed. Environment variables still take highest precedence. New `-D` system property support added (e.g. `-Dautoheal.ai.provider=openai`). Both idiomatic property keys (`autoheal.ai.provider`) and env-style keys (`AUTOHEAL_AI_PROVIDER`) are accepted in the properties file.
+
+### Removed
+- `dotenv-java` dependency — no longer needed; config uses `java.util.Properties` (built-in JDK)
+
+### Migration
+- Rename `.env` to `src/test/resources/autoheal.properties` and convert `KEY=value` lines to `key.name=value` format (env-style keys also work as-is in the properties file)
+
 ## [1.3.5] - 2026-04-15
 
 ### Fixed
