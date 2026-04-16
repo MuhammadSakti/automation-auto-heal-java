@@ -232,7 +232,7 @@ public class SeleniumAutoHeal {
         }
 
         public SeleniumAutoHeal build() {
-            if (config == null) config = AutoHealConfig.fromEnv();
+            if (config == null) config = AutoHealConfig.load();
             if (driver == null) throw new IllegalStateException("Selenium WebDriver must be set.");
             return new SeleniumAutoHeal(config, driver, reportName);
         }

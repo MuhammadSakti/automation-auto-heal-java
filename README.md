@@ -107,7 +107,7 @@ Choose the entry point for your framework:
 
 ```java
 PlaywrightAutoHeal healer = PlaywrightAutoHeal.builder()
-    .config(AutoHealConfig.fromEnv())
+    .config(AutoHealConfig.load())
     .page(page)
     .reportName("HomePage")
     .build();
@@ -124,7 +124,7 @@ healer.finish();
 
 ```java
 SeleniumAutoHeal healer = SeleniumAutoHeal.builder()
-    .config(AutoHealConfig.fromEnv())
+    .config(AutoHealConfig.load())
     .driver(driver)
     .reportName("LoginPage")
     .build();
@@ -251,8 +251,8 @@ Since every per-class call writes into the same `reportPath/run_<timestamp>/` fo
 ```java
 @AfterSuite
 public void generateReportDashboard() {
-    PlaywrightAutoHeal.generateReportDashboard(AutoHealConfig.fromEnv());
-    // or: SeleniumAutoHeal.generateReportDashboard(AutoHealConfig.fromEnv());
+    PlaywrightAutoHeal.generateReportDashboard(AutoHealConfig.load());
+    // or: SeleniumAutoHeal.generateReportDashboard(AutoHealConfig.load());
 }
 ```
 

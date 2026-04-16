@@ -18,7 +18,11 @@ public class AutoHealConfig {
 
     private AutoHealConfig() {}
 
-    public static AutoHealConfig fromEnv() {
+    /** @deprecated Use {@link #load()} instead. */
+    @Deprecated
+    public static AutoHealConfig fromEnv() { return load(); }
+
+    public static AutoHealConfig load() {
         Properties props = new Properties();
         try (InputStream is = AutoHealConfig.class.getClassLoader()
                 .getResourceAsStream("autoheal.properties")) {
@@ -52,50 +56,48 @@ public class AutoHealConfig {
     }
 
     private static String resolveApiKey(Properties props, AiProvider provider) {
-        // Try generic key first
-        String key = resolve(props, "AUTOHEAL_AI_API_KEY", "autoheal.ai.api-key", "");
-        if (!key.isEmpty()) return key;
-
-        // Fall back to provider-specific keys
-        switch (provider) {
-            case CLAUDE:
-                key = resolve(props, "CLAUDE_API_KEY", "claude.api-key", "");
-                if (!key.isEmpty()) return key;
-                return resolve(props, "ANTHROPIC_API_KEY", "anthropic.api-key", "");
-            case OPENAI:
-                return resolve(props, "OPENAI_API_KEY", "openai.api-key", "");
-            case GEMINI:
-                key = resolve(props, "GEMINI_API_KEY", "gemini.api-key", "");
-                if (!key.isEmpty()) return key;
-                return resolve(props, "GOOGLE_API_KEY", "google.api-key", "");
-            default:
-                return "";
+        String[][] candidates = switch (provider) {
+            case CLAUDE -> new String[][]{
+                    {"AUTOHEAL_AI_API_KEY", "autoheal.ai.api-key"},
+                    {"CLAUDE_API_KEY", "claude.api-key"},
+                    {"ANTHROPIC_API_KEY", "anthropic.api-key"}};
+            case OPENAI -> new String[][]{
+                    {"AUTOHEAL_AI_API_KEY", "autoheal.ai.api-key"},
+                    {"OPENAI_API_KEY", "openai.api-key"}};
+            case GEMINI -> new String[][]{
+                    {"AUTOHEAL_AI_API_KEY", "autoheal.ai.api-key"},
+                    {"GEMINI_API_KEY", "gemini.api-key"},
+                    {"GOOGLE_API_KEY", "google.api-key"}};
+        };
+        for (String[] pair : candidates) {
+            String key = resolve(props, pair[0], pair[1], "");
+            if (!key.isEmpty()) return key;
         }
+        return "";
     }
 
     private static AiProvider parseProvider(String value) {
-        switch (value.toLowerCase()) {
-            case "gemini": return AiProvider.GEMINI;
-            case "openai": case "chatgpt": return AiProvider.OPENAI;
-            case "anthropic": case "claude": return AiProvider.CLAUDE;
-            default: return AiProvider.CLAUDE;
-        }
+        return switch (value.toLowerCase()) {
+            case "gemini" -> AiProvider.GEMINI;
+            case "openai", "chatgpt" -> AiProvider.OPENAI;
+            default -> AiProvider.CLAUDE;
+        };
     }
 
     private static AutoFixMode parseAutoFix(String value) {
-        switch (value.toLowerCase()) {
-            case "auto": return AutoFixMode.AUTO;
-            case "manual": return AutoFixMode.MANUAL;
-            default: return AutoFixMode.OFF;
-        }
+        return switch (value.toLowerCase()) {
+            case "auto" -> AutoFixMode.AUTO;
+            case "manual" -> AutoFixMode.MANUAL;
+            default -> AutoFixMode.OFF;
+        };
     }
 
     private static String defaultModel(AiProvider provider) {
-        switch (provider) {
-            case GEMINI: return "gemini-2.0-flash";
-            case OPENAI: return "gpt-4o";
-            default: return "claude-sonnet-4-6";
-        }
+        return switch (provider) {
+            case GEMINI -> "gemini-2.0-flash";
+            case OPENAI -> "gpt-4o";
+            default -> "claude-sonnet-4-6";
+        };
     }
 
     // Getters
@@ -113,7 +115,7 @@ public class AutoHealConfig {
         private final AutoHealConfig config;
 
         private Builder() {
-            this.config = AutoHealConfig.fromEnv();
+            this.config = AutoHealConfig.load();
         }
 
         public Builder aiProvider(AiProvider provider) { config.aiProvider = provider; return this; }

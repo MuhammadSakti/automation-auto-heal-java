@@ -228,7 +228,7 @@ public class PlaywrightAutoHeal {
         }
 
         public PlaywrightAutoHeal build() {
-            if (config == null) config = AutoHealConfig.fromEnv();
+            if (config == null) config = AutoHealConfig.load();
             if (page == null) throw new IllegalStateException("Playwright Page must be set.");
             return new PlaywrightAutoHeal(config, page, reportName);
         }
