@@ -95,26 +95,51 @@ public class SourceFixer {
                 "Fixed at line " + sourceLine);
     }
 
-    private String tryReplaceLine(String line, String originalSelector, String newSelector) {
-        // 1. Direct replacement (works for page.locator("...") style)
+    // Exposed for unit testing
+    String tryReplaceLine(String line, String originalSelector, String newSelector) {
+        // 0. Selenium By.<type>: value format — precise rewrite that preserves the By call
+        //    and switches the By type when the healed selector's shape requires it.
+        SeleniumBy by = extractSeleniumBy(originalSelector);
+        if (by != null) {
+            return rewriteSeleniumByCall(line, by, newSelector);
+        }
+
+        // 1. Direct replacement (raw selector appears as-is, e.g. page.locator("...") style)
         String oldSelector = extractSelectorFromOriginal(originalSelector);
         if (oldSelector != null && line.contains(oldSelector)) {
             return line.replace(oldSelector, newSelector);
         }
 
-        // 2. Playwright getByTestId/byTestId pattern
-        String oldTestId = extractTestId(originalSelector);
-        if (oldTestId == null) return null;
-
-        // 2a. Both old and new are test-ids — swap just the value
-        String newTestId = extractTestId(newSelector);
-        if (newTestId != null) {
-            String result = replaceTestIdInCall(line, oldTestId, newTestId);
+        // 2. Identify Playwright getByX call from the internal format
+        LocatorCall call = extractLocatorCall(originalSelector);
+        if (call != null) {
+            String result = rewritePlaywrightBuilder(line, call, newSelector);
             if (result != null) return result;
         }
 
-        // 2b. New selector is not a test-id — rewrite the whole method call
-        return rewriteTestIdCall(line, oldTestId, newSelector);
+        // 3. Plain .locator(...).filter(...) chain (no getBy involved)
+        if (originalSelector != null && originalSelector.contains(">>")) {
+            return rewriteFilterChain(line, newSelector);
+        }
+
+        return null;
+    }
+
+    /**
+     * Tries a testid → testid value-swap first (keeps the {@code byTestId()} call intact),
+     * then falls back to a full call rewrite.
+     */
+    private String rewritePlaywrightBuilder(String line, LocatorCall call, String newSelector) {
+        String preserved = tryPreserveTestId(line, call, newSelector);
+        if (preserved != null) return preserved;
+        return rewriteGetByCall(line, call, newSelector);
+    }
+
+    private String tryPreserveTestId(String line, LocatorCall call, String newSelector) {
+        if (!call.method.equals("getByTestId")) return null;
+        String newTestId = extractTestId(newSelector);
+        if (newTestId == null) return null;
+        return replaceTestIdInCall(line, call.keyValue, newTestId);
     }
 
     private FixResult skip(String sourceFile, int sourceLine,
@@ -141,27 +166,72 @@ public class SourceFixer {
         return original;
     }
 
-    // Pattern for data-testid in various formats:
-    //   Playwright internal: internal:attr=[data-testid="value"]
-    //   CSS selector:        [data-testid="value"]
-    private static final Pattern TEST_ID_PATTERN = Pattern.compile(
+    // Playwright internal formats:
+    //   getByTestId   → internal:testid=[data-testid="X"s]  or  internal:attr=[data-testid="X"]
+    //   getByRole     → internal:role=heading[name="X"i]
+    //   getByText     → internal:text="X"i
+    //   getByLabel    → internal:label="X"i
+    //   getByPlaceholder / getByAltText / getByTitle → internal:attr=[placeholder|alt|title="X"i]
+    private static final Pattern TEST_ID_VALUE_PATTERN = Pattern.compile(
             "data-testid=[\"']([^\"']+)[\"']");
+    private static final Pattern ROLE_NAME_PATTERN = Pattern.compile(
+            "internal:role=\\w+\\[name=[\"']([^\"']+)[\"']");
+    private static final Pattern TEXT_PATTERN = Pattern.compile(
+            "internal:text=[\"']([^\"']+)[\"']");
+    private static final Pattern LABEL_PATTERN = Pattern.compile(
+            "internal:label=[\"']([^\"']+)[\"']");
+    private static final Pattern ATTR_PATTERN = Pattern.compile(
+            "internal:(?:attr|testid)=\\[([\\w-]+)=[\"']([^\"']+)[\"']");
+
+    private static class LocatorCall {
+        final String method;
+        final String keyValue;
+        LocatorCall(String method, String keyValue) {
+            this.method = method;
+            this.keyValue = keyValue;
+        }
+    }
 
     /**
-     * Extracts the test-id value from Playwright's internal format or CSS selector.
+     * Extracts the test-id value from a Playwright internal or CSS data-testid format.
      * E.g., "internal:attr=[data-testid=\"header\"]" -> "header"
-     *        "[data-testid=\"app-header\"]"          -> "app-header"
      */
     private String extractTestId(String selector) {
         if (selector == null) return null;
-        Matcher m = TEST_ID_PATTERN.matcher(selector);
+        Matcher m = TEST_ID_VALUE_PATTERN.matcher(selector);
         return m.find() ? m.group(1) : null;
+    }
+
+    /** Identifies which Playwright getByX builder the internal selector came from. */
+    private LocatorCall extractLocatorCall(String selector) {
+        if (selector == null) return null;
+        Matcher m;
+        if ((m = ROLE_NAME_PATTERN.matcher(selector)).find()) {
+            return new LocatorCall("getByRole", m.group(1));
+        }
+        if ((m = TEXT_PATTERN.matcher(selector)).find()) {
+            return new LocatorCall("getByText", m.group(1));
+        }
+        if ((m = LABEL_PATTERN.matcher(selector)).find()) {
+            return new LocatorCall("getByLabel", m.group(1));
+        }
+        if ((m = ATTR_PATTERN.matcher(selector)).find()) {
+            String attr = m.group(1);
+            String value = m.group(2);
+            switch (attr) {
+                case "data-testid": return new LocatorCall("getByTestId", value);
+                case "placeholder": return new LocatorCall("getByPlaceholder", value);
+                case "alt":         return new LocatorCall("getByAltText", value);
+                case "title":       return new LocatorCall("getByTitle", value);
+                default: return null;
+            }
+        }
+        return null;
     }
 
     /**
      * Replaces the test-id value inside a byTestId("old")/getByTestId("old") call,
      * only touching the string literal — not variable names or other text on the line.
-     * Returns the new line, or null if the pattern wasn't found.
      */
     private String replaceTestIdInCall(String line, String oldTestId, String newTestId) {
         Pattern p = Pattern.compile("((?:get)?[Bb]yTestId\\s*\\(\\s*[\"'])" +
@@ -176,30 +246,164 @@ public class SourceFixer {
     }
 
     /**
-     * Rewrites a byTestId("old") or getByTestId("old") call to obj.locator("newSelector"),
-     * preserving the original object reference (e.g. page, page1, pageInventory).
-     * Returns the new line, or null if the pattern wasn't found.
+     * Rewrites {@code obj.getByX(args)}  — possibly followed by {@code .filter(...)} chains —
+     * to {@code obj.locator("newSelector")}, preserving the object variable name.
+     * The call is identified by matching the method name AND the key value appearing
+     * (quoted) inside the call's argument list.
      */
-    private String rewriteTestIdCall(String line, String oldTestId, String newSelector) {
-        // Match obj.getByTestId("old") or obj.byTestId("old") — capture the object name
-        Pattern p = Pattern.compile("(\\w+)\\s*\\.\\s*(?:get)?[Bb]yTestId\\s*\\(\\s*[\"']" +
-                Pattern.quote(oldTestId) + "[\"']\\s*\\)");
+    private String rewriteGetByCall(String line, LocatorCall call, String newSelector) {
+        String methodAlt = call.method.equals("getByTestId")
+                ? "(?:get)?[Bb]yTestId"
+                : Pattern.quote(call.method);
+        Pattern p = Pattern.compile("(\\w+)\\s*\\.\\s*" + methodAlt + "\\s*\\(");
         Matcher m = p.matcher(line);
-        if (m.find()) {
+        while (m.find()) {
+            int openParen = m.end() - 1;
+            int closeParen = findMatchingParen(line, openParen);
+            if (closeParen < 0) continue;
+
+            String args = line.substring(openParen + 1, closeParen);
+            if (!containsQuoted(args, call.keyValue)) continue;
+
+            int end = consumeFilterChain(line, closeParen + 1);
             String objName = m.group(1);
             return line.substring(0, m.start()) +
-                    objName + ".locator(\"" + newSelector.replace("\"", "\\\"") + "\")" +
-                    line.substring(m.end());
+                    objName + ".locator(\"" + escapeForString(newSelector) + "\")" +
+                    line.substring(end);
         }
-        // Fallback: standalone byTestId("old") call (no object prefix, e.g. helper method)
-        Pattern p2 = Pattern.compile("(?:get)?[Bb]yTestId\\s*\\(\\s*[\"']" +
-                Pattern.quote(oldTestId) + "[\"']\\s*\\)");
-        Matcher m2 = p2.matcher(line);
-        if (m2.find()) {
-            return line.substring(0, m2.start()) +
-                    "locator(\"" + newSelector.replace("\"", "\\\"") + "\")" +
-                    line.substring(m2.end());
+
+        // Fallback: standalone byTestId("...") / getByTestId("...") with no object prefix
+        if (call.method.equals("getByTestId")) {
+            Pattern p2 = Pattern.compile("(?:get)?[Bb]yTestId\\s*\\(\\s*[\"']" +
+                    Pattern.quote(call.keyValue) + "[\"']\\s*\\)");
+            Matcher m2 = p2.matcher(line);
+            if (m2.find()) {
+                return line.substring(0, m2.start()) +
+                        "locator(\"" + escapeForString(newSelector) + "\")" +
+                        line.substring(m2.end());
+            }
         }
         return null;
+    }
+
+    /**
+     * Rewrites {@code obj.locator(...).filter(...)} chains to {@code obj.locator("newSelector")}.
+     * Only matches when at least one .filter(...) is chained — otherwise the plain
+     * locator() case is already handled by direct string replacement.
+     */
+    private String rewriteFilterChain(String line, String newSelector) {
+        Pattern p = Pattern.compile("(\\w+)\\s*\\.\\s*locator\\s*\\(");
+        Matcher m = p.matcher(line);
+        while (m.find()) {
+            int openParen = m.end() - 1;
+            int closeParen = findMatchingParen(line, openParen);
+            if (closeParen < 0) continue;
+
+            int end = consumeFilterChain(line, closeParen + 1);
+            if (end == closeParen + 1) continue; // no trailing .filter(...)
+
+            String objName = m.group(1);
+            return line.substring(0, m.start()) +
+                    objName + ".locator(\"" + escapeForString(newSelector) + "\")" +
+                    line.substring(end);
+        }
+        return null;
+    }
+
+    /**
+     * If the substring starting at {@code pos} is one or more chained {@code .filter(...)}
+     * calls (with optional whitespace between), returns the position after the last one.
+     * Otherwise returns {@code pos} unchanged.
+     */
+    private int consumeFilterChain(String line, int pos) {
+        while (true) {
+            int next = pos;
+            while (next < line.length() && Character.isWhitespace(line.charAt(next))) next++;
+            if (next + 7 > line.length() || !line.startsWith(".filter", next)) return pos;
+            int filterOpen = line.indexOf('(', next);
+            if (filterOpen < 0) return pos;
+            int filterClose = findMatchingParen(line, filterOpen);
+            if (filterClose < 0) return pos;
+            pos = filterClose + 1;
+        }
+    }
+
+    /**
+     * Finds the index of the close paren matching the open paren at {@code openIdx}.
+     * Skips quoted strings so parens inside string literals don't affect depth.
+     */
+    private int findMatchingParen(String s, int openIdx) {
+        int depth = 1;
+        boolean inString = false;
+        char stringChar = 0;
+        for (int i = openIdx + 1; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (inString) {
+                if (c == '\\' && i + 1 < s.length()) { i++; continue; }
+                if (c == stringChar) inString = false;
+                continue;
+            }
+            if (c == '"' || c == '\'') { inString = true; stringChar = c; continue; }
+            if (c == '(') { depth++; continue; }
+            if (c == ')' && --depth == 0) return i;
+        }
+        return -1;
+    }
+
+    private boolean containsQuoted(String haystack, String value) {
+        return haystack.contains("\"" + value + "\"") || haystack.contains("'" + value + "'");
+    }
+
+    private String escapeForString(String s) {
+        return s.replace("\\", "\\\\").replace("\"", "\\\"");
+    }
+
+    // ── Selenium By.<type>: value handling ──────────────────────────────────
+
+    private static final Pattern SELENIUM_BY_TOSTRING = Pattern.compile(
+            "^By\\.(\\w+)\\s*:\\s*(.*)$");
+
+    private static class SeleniumBy {
+        final String type;   // id / name / xpath / cssSelector / className / tagName / linkText / partialLinkText
+        final String value;
+        SeleniumBy(String type, String value) { this.type = type; this.value = value; }
+    }
+
+    /** Parses {@code "By.xpath: //div"} / {@code "By.id: foo"} etc. */
+    private SeleniumBy extractSeleniumBy(String original) {
+        if (original == null) return null;
+        Matcher m = SELENIUM_BY_TOSTRING.matcher(original.trim());
+        return m.matches() ? new SeleniumBy(m.group(1), m.group(2)) : null;
+    }
+
+    /**
+     * Rewrites a Selenium {@code By.<type>("oldValue")} call to {@code By.<newType>("newSelector")}.
+     * The new By type is inferred from the healed selector's shape (xpath vs. cssSelector),
+     * so an {@code id}/{@code name}/{@code linkText} locator can be swapped to an xpath/CSS one
+     * without leaving a broken call behind.
+     */
+    private String rewriteSeleniumByCall(String line, SeleniumBy by, String newSelector) {
+        Pattern p = Pattern.compile("By\\s*\\.\\s*" + Pattern.quote(by.type) +
+                "\\s*\\(\\s*[\"']" + Pattern.quote(by.value) + "[\"']\\s*\\)");
+        Matcher m = p.matcher(line);
+        if (m.find()) {
+            String newType = detectSeleniumByType(newSelector);
+            String newCall = "By." + newType + "(\"" + escapeForString(newSelector) + "\")";
+            return line.substring(0, m.start()) + newCall + line.substring(m.end());
+        }
+        return null;
+    }
+
+    /**
+     * Heuristic: if the healed selector looks like an XPath, use {@code By.xpath};
+     * otherwise default to {@code By.cssSelector} (accepts CSS, IDs via {@code #}, etc.).
+     */
+    private String detectSeleniumByType(String selector) {
+        String t = selector.trim();
+        if (t.startsWith("//") || t.startsWith("./") || t.startsWith(".//")
+                || t.startsWith("(/") || t.startsWith("(./") || t.startsWith("(.//")) {
+            return "xpath";
+        }
+        return "cssSelector";
     }
 }

@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.4.2] - 2026-04-16
+
+### Added
+- **SourceFixer handles full Playwright locator builder API**: `getByRole` (with `setName()` and other options), `getByText`, `getByLabel`, `getByPlaceholder`, `getByAltText`, `getByTitle`, and `.locator(...).filter(...)` chains are now auto-rewritten to `obj.locator("newSelector")` when the AI returns a non-builder selector. The object variable name (`page`, `pageInventory`, etc.) is preserved. Trailing `.filter(...)` calls chained onto any `getByX` locator are also consumed so the replacement doesn't leave orphaned filter calls.
+- **SourceFixer rewrites Selenium By calls with type switching**: the rewriter now parses `By.<type>: value` from `By.toString()` and rewrites the specific `By.<type>("value")` call, inferring the correct new `By` type (xpath vs. cssSelector) from the healed selector. Fixes a pre-existing bug where healing `By.id("login")` with an XPath produced `By.id("//button[@data-qa='login']")` at the source level. All 8 standard Selenium By types are supported (id, name, xpath, cssSelector, className, tagName, linkText, partialLinkText).
+- **Unit tests for `SourceFixer`**: 26 tests covering every supported Playwright & Selenium locator format plus regression cases for variable-name corruption and mismatched keys.
+
+### Changed
+- **`SourceFixer.rewriteGetByCall` uses balanced-paren scanning**: previously the rewriter used a flat regex that broke on nested method calls like `new Page.GetByRoleOptions().setName(...)`. It now walks string-aware paren depth to find the end of the call.
+
+## [1.4.1] - 2026-04-16
+
+### Changed
+- **Renamed `AutoHealConfig.fromEnv()` → `AutoHealConfig.load()`**: the old name implied `.env`-only loading, which hasn't been accurate since v1.4.0. `fromEnv()` remains as a `@Deprecated` delegate for backward compatibility.
+
 ## [1.4.0] - 2026-04-16
 
 ### Changed
