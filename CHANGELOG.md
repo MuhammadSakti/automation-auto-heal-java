@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.5.1] - 2026-05-05
+
+### Fixed
+- **Azure OpenAI**: use `max_completion_tokens` instead of `max_tokens` — newer models (o4-mini, etc.) reject the legacy parameter.
+
 ## [1.5.0] - 2026-05-05
 
 ### Added
