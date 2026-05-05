@@ -14,6 +14,9 @@ class AutoHealFactory {
                 return new GeminiProvider(config.getAiApiKey(), config.getAiModel());
             case OPENAI:
                 return new OpenAIProvider(config.getAiApiKey(), config.getAiModel());
+            case AZURE_OPENAI:
+                return new AzureOpenAIProvider(config.getAiApiKey(),
+                        config.getAzureEndpoint(), config.getAzureDeployment(), config.getAzureApiVersion());
             default:
                 return new ClaudeProvider(config.getAiApiKey(), config.getAiModel());
         }

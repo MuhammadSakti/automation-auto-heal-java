@@ -6,7 +6,7 @@ import java.util.Properties;
 
 public class AutoHealConfig {
 
-    public enum AiProvider { CLAUDE, GEMINI, OPENAI }
+    public enum AiProvider { CLAUDE, GEMINI, OPENAI, AZURE_OPENAI }
     public enum AutoFixMode { OFF, AUTO, MANUAL }
 
     private AiProvider aiProvider;
@@ -15,6 +15,9 @@ public class AutoHealConfig {
     private String reportPath;
     private AutoFixMode autoFix;
     private boolean cacheEnabled;
+    private String azureEndpoint;
+    private String azureApiVersion;
+    private String azureDeployment;
 
     private AutoHealConfig() {}
 
@@ -40,6 +43,9 @@ public class AutoHealConfig {
         config.reportPath = resolve(props, "AUTOHEAL_REPORT_PATH", "autoheal.report-path", "./autoheal-reports/");
         config.autoFix = parseAutoFix(resolve(props, "AUTOHEAL_AUTOFIX", "autoheal.autofix", "off"));
         config.cacheEnabled = Boolean.parseBoolean(resolve(props, "AUTOHEAL_CACHE_ENABLED", "autoheal.cache-enabled", "true"));
+        config.azureEndpoint = resolve(props, "AUTOHEAL_AZURE_ENDPOINT", "autoheal.azure.endpoint", "");
+        config.azureApiVersion = resolve(props, "AUTOHEAL_AZURE_API_VERSION", "autoheal.azure.api-version", "2024-10-21");
+        config.azureDeployment = resolve(props, "AUTOHEAL_AZURE_DEPLOYMENT", "autoheal.azure.deployment", "");
         return config;
     }
 
@@ -64,6 +70,9 @@ public class AutoHealConfig {
             case OPENAI -> new String[][]{
                     {"AUTOHEAL_AI_API_KEY", "autoheal.ai.api-key"},
                     {"OPENAI_API_KEY", "openai.api-key"}};
+            case AZURE_OPENAI -> new String[][]{
+                    {"AUTOHEAL_AI_API_KEY", "autoheal.ai.api-key"},
+                    {"AZURE_OPENAI_API_KEY", "azure-openai.api-key"}};
             case GEMINI -> new String[][]{
                     {"AUTOHEAL_AI_API_KEY", "autoheal.ai.api-key"},
                     {"GEMINI_API_KEY", "gemini.api-key"},
@@ -80,6 +89,7 @@ public class AutoHealConfig {
         return switch (value.toLowerCase()) {
             case "gemini" -> AiProvider.GEMINI;
             case "openai", "chatgpt" -> AiProvider.OPENAI;
+            case "azure_openai", "azure-openai", "azure" -> AiProvider.AZURE_OPENAI;
             default -> AiProvider.CLAUDE;
         };
     }
@@ -96,6 +106,7 @@ public class AutoHealConfig {
         return switch (provider) {
             case GEMINI -> "gemini-2.0-flash";
             case OPENAI -> "gpt-4o";
+            case AZURE_OPENAI -> "";
             default -> "claude-sonnet-4-6";
         };
     }
@@ -107,6 +118,9 @@ public class AutoHealConfig {
     public String getReportPath() { return reportPath; }
     public AutoFixMode getAutoFix() { return autoFix; }
     public boolean isCacheEnabled() { return cacheEnabled; }
+    public String getAzureEndpoint() { return azureEndpoint; }
+    public String getAzureApiVersion() { return azureApiVersion; }
+    public String getAzureDeployment() { return azureDeployment; }
 
     // Builder
     public static Builder builder() { return new Builder(); }
@@ -124,6 +138,9 @@ public class AutoHealConfig {
         public Builder reportPath(String path) { config.reportPath = path; return this; }
         public Builder autoFix(AutoFixMode mode) { config.autoFix = mode; return this; }
         public Builder cacheEnabled(boolean enabled) { config.cacheEnabled = enabled; return this; }
+        public Builder azureEndpoint(String endpoint) { config.azureEndpoint = endpoint; return this; }
+        public Builder azureApiVersion(String apiVersion) { config.azureApiVersion = apiVersion; return this; }
+        public Builder azureDeployment(String deployment) { config.azureDeployment = deployment; return this; }
 
         public AutoHealConfig build() { return config; }
     }

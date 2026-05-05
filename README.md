@@ -43,7 +43,7 @@ Add the repository and dependency to your `pom.xml`:
     <dependency>
         <groupId>com.autoheal</groupId>
         <artifactId>auto-heal</artifactId>
-        <version>1.4.2</version>
+        <version>1.5.0</version>
     </dependency>
 </dependencies>
 ```
@@ -91,6 +91,28 @@ AutoHealConfig config = AutoHealConfig.builder()
     .reportPath("./autoheal-reports/")
     .autoFix(AutoHealConfig.AutoFixMode.OFF)
     .cacheEnabled(true)
+    .build();
+```
+
+### Azure OpenAI
+
+```properties
+autoheal.ai.provider=azure_openai
+autoheal.ai.api-key=your-azure-api-key
+autoheal.azure.endpoint=https://your-resource.openai.azure.com
+autoheal.azure.deployment=your-deployment-name
+autoheal.azure.api-version=2024-10-21
+```
+
+Or via Builder:
+
+```java
+AutoHealConfig config = AutoHealConfig.builder()
+    .aiProvider(AutoHealConfig.AiProvider.AZURE_OPENAI)
+    .aiApiKey("your-azure-api-key")
+    .azureEndpoint("https://your-resource.openai.azure.com")
+    .azureDeployment("your-deployment-name")
+    .azureApiVersion("2025-04-01-preview")  // optional, defaults to 2024-10-21
     .build();
 ```
 

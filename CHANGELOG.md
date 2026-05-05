@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.5.0] - 2026-05-05
+
+### Added
+- **Azure OpenAI provider**: first-class support for Azure-hosted OpenAI deployments. Set `autoheal.ai.provider=azure_openai` along with `autoheal.azure.endpoint`, `autoheal.azure.deployment`, and optionally `autoheal.azure.api-version` (defaults to `2024-10-21`). Uses Azure's `api-key` header authentication and deployment-based URL routing. All three AI methods (single heal, batch heal, failure analysis) are supported.
+- New config keys: `AUTOHEAL_AZURE_ENDPOINT` / `autoheal.azure.endpoint`, `AUTOHEAL_AZURE_DEPLOYMENT` / `autoheal.azure.deployment`, `AUTOHEAL_AZURE_API_VERSION` / `autoheal.azure.api-version`
+- API key fallback: `AZURE_OPENAI_API_KEY` / `azure-openai.api-key`
+- Builder methods: `azureEndpoint()`, `azureDeployment()`, `azureApiVersion()`
+
 ## [1.4.2] - 2026-04-16
 
 ### Added
