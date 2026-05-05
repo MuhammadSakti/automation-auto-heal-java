@@ -114,7 +114,7 @@ public class PlaywrightHealer {
         }
 
         // One AI call for all broken locators
-        Map<String, AIResponse> batchResults = aiProvider.findLocatorsBatch(cachedDom, locatorMap);
+        Map<String, AIResponse> batchResults = aiProvider.findLocatorsBatch(cachedDom, locatorMap, AIProvider.Framework.PLAYWRIGHT);
 
         // Process results
         for (PendingHeal p : pendingHeals) {
@@ -157,7 +157,7 @@ public class PlaywrightHealer {
             cachedDomUrl = currentUrl;
         }
         String dom = cachedDom;
-        AIResponse aiResponse = aiProvider.findLocator(dom, description, originalSelector);
+        AIResponse aiResponse = aiProvider.findLocator(dom, description, originalSelector, AIProvider.Framework.PLAYWRIGHT);
         String newSelector = aiResponse.getSelector();
 
         Locator healed = tryLocator(page.locator(newSelector));

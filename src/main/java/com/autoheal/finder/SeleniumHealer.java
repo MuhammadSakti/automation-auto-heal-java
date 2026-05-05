@@ -116,7 +116,7 @@ public class SeleniumHealer {
         }
 
         // One AI call for all broken locators
-        Map<String, AIResponse> batchResults = aiProvider.findLocatorsBatch(cachedDom, locatorMap);
+        Map<String, AIResponse> batchResults = aiProvider.findLocatorsBatch(cachedDom, locatorMap, AIProvider.Framework.SELENIUM);
 
         // Process results
         for (PendingHeal p : pendingHeals) {
@@ -159,7 +159,7 @@ public class SeleniumHealer {
             cachedDomUrl = currentUrl;
         }
         String dom = cachedDom;
-        AIResponse aiResponse = aiProvider.findLocator(dom, description, originalSelector);
+        AIResponse aiResponse = aiProvider.findLocator(dom, description, originalSelector, AIProvider.Framework.SELENIUM);
         String newSelector = aiResponse.getSelector();
 
         WebElement healed = tryFind(toBy(newSelector));

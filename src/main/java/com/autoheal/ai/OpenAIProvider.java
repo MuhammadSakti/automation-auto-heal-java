@@ -31,9 +31,9 @@ public class OpenAIProvider implements AIProvider {
     }
 
     @Override
-    public AIResponse findLocator(String domSnapshot, String description, String originalSelector) {
+    public AIResponse findLocator(String domSnapshot, String description, String originalSelector, Framework framework) {
         try {
-            String prompt = buildPrompt(domSnapshot, description, originalSelector);
+            String prompt = AIProvider.buildHealPrompt(domSnapshot, description, originalSelector, framework);
 
             ObjectNode body = mapper.createObjectNode();
             body.put("model", model);
@@ -71,9 +71,9 @@ public class OpenAIProvider implements AIProvider {
     }
 
     @Override
-    public Map<String, AIResponse> findLocatorsBatch(String domSnapshot, Map<String, String> locators) {
+    public Map<String, AIResponse> findLocatorsBatch(String domSnapshot, Map<String, String> locators, Framework framework) {
         try {
-            String prompt = buildBatchPrompt(domSnapshot, locators);
+            String prompt = AIProvider.buildBatchHealPrompt(domSnapshot, locators, framework);
 
             ObjectNode body = mapper.createObjectNode();
             body.put("model", model);
@@ -156,33 +156,6 @@ public class OpenAIProvider implements AIProvider {
         } catch (IOException | InterruptedException e) {
             throw new RuntimeException("Failed to call OpenAI API for failure analysis: " + e.getMessage(), e);
         }
-    }
-
-    private String buildBatchPrompt(String domSnapshot, Map<String, String> locators) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("Multiple UI locators have broken and need to be healed.\n\n");
-        sb.append("Current page DOM:\n```html\n").append(domSnapshot).append("\n```\n\n");
-        sb.append("Broken locators:\n");
-        int i = 1;
-        for (Map.Entry<String, String> entry : locators.entrySet()) {
-            sb.append(i++).append(". Original: ").append(entry.getKey())
-              .append(" | Description: ").append(entry.getValue()).append("\n");
-        }
-        sb.append("\nFor each locator, find the best CSS or XPath selector.\n");
-        sb.append("Respond in this exact format for each (no markdown, no extra text):\n");
-        sb.append("ORIGINAL: <original selector>\nSELECTOR: <new selector>\nREASONING: <brief explanation>\n\n");
-        return sb.toString();
-    }
-
-    private String buildPrompt(String domSnapshot, String description, String originalSelector) {
-        return "A UI locator has broken and needs to be healed.\n\n" +
-                "Original selector: " + originalSelector + "\n" +
-                "Element description: " + description + "\n\n" +
-                "Current page DOM:\n```html\n" + domSnapshot + "\n```\n\n" +
-                "Find the best CSS or XPath selector for the described element.\n" +
-                "Respond in this exact format (no markdown, no extra text):\n" +
-                "SELECTOR: <the selector>\n" +
-                "REASONING: <brief explanation>";
     }
 
     private AIResponse parseResponse(String text, int tokensUsed) {

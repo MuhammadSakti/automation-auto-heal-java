@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.6.0] - 2026-05-05
+
+### Changed
+- **Framework-aware AI prompts**: Playwright healing now instructs the AI to prefer `role=`, `text=`, and `data-testid` selectors over raw CSS/XPath. Selenium healing continues to use CSS/XPath. Prompt building is centralized in `AIProvider` — all 4 providers share the same prompt logic.
+- **`AIProvider` interface**: `findLocator` and `findLocatorsBatch` now accept a `Framework` parameter (`PLAYWRIGHT` or `SELENIUM`).
+
+### Added
+- **SourceFixer: Playwright `role=`/`text=` → idiomatic `getByRole`/`getByText` rewriting**: when the AI returns a Playwright role selector like `role=button[name="Submit"]`, the auto-fixer rewrites the source to `page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Submit"))` instead of `page.locator("role=button[name=\"Submit\"]")`. Similarly, `text=Hello` becomes `page.getByText("Hello")`. All standard ARIA roles are supported.
+
 ## [1.5.1] - 2026-05-05
 
 ### Fixed

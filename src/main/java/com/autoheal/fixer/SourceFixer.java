@@ -10,6 +10,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -107,6 +108,9 @@ public class SourceFixer {
         // 1. Direct replacement (raw selector appears as-is, e.g. page.locator("...") style)
         String oldSelector = extractSelectorFromOriginal(originalSelector);
         if (oldSelector != null && line.contains(oldSelector)) {
+            // Try converting Playwright role=/text= selectors to idiomatic getByX calls
+            String idiomaticRewrite = tryRewriteToPlaywrightGetBy(line, oldSelector, newSelector);
+            if (idiomaticRewrite != null) return idiomaticRewrite;
             return line.replace(oldSelector, newSelector);
         }
 
@@ -356,6 +360,103 @@ public class SourceFixer {
 
     private String escapeForString(String s) {
         return s.replace("\\", "\\\\").replace("\"", "\\\"");
+    }
+
+    // ── Playwright role=/text= → getByRole/getByText rewriting ──────────────
+
+    private static final Pattern ROLE_SELECTOR = Pattern.compile(
+            "^role=(\\w+)(?:\\[name=[\"']([^\"']*)[\"'](?:i)?\\])?$");
+    private static final Pattern TEXT_SELECTOR = Pattern.compile(
+            "^text=[\"']?([^\"']+)[\"']?$");
+
+    private static final Map<String, String> ARIA_ROLE_MAP = Map.ofEntries(
+            Map.entry("button", "BUTTON"), Map.entry("heading", "HEADING"),
+            Map.entry("link", "LINK"), Map.entry("checkbox", "CHECKBOX"),
+            Map.entry("textbox", "TEXTBOX"), Map.entry("combobox", "COMBOBOX"),
+            Map.entry("img", "IMG"), Map.entry("list", "LIST"),
+            Map.entry("listitem", "LISTITEM"), Map.entry("navigation", "NAVIGATION"),
+            Map.entry("dialog", "DIALOG"), Map.entry("tab", "TAB"),
+            Map.entry("tabpanel", "TABPANEL"), Map.entry("radio", "RADIO"),
+            Map.entry("menuitem", "MENUITEM"), Map.entry("menu", "MENU"),
+            Map.entry("cell", "CELL"), Map.entry("row", "ROW"),
+            Map.entry("table", "TABLE"), Map.entry("alert", "ALERT"),
+            Map.entry("banner", "BANNER"), Map.entry("main", "MAIN"),
+            Map.entry("region", "REGION"), Map.entry("search", "SEARCH"),
+            Map.entry("switch", "SWITCH"), Map.entry("slider", "SLIDER"),
+            Map.entry("spinbutton", "SPINBUTTON"), Map.entry("progressbar", "PROGRESSBAR"),
+            Map.entry("separator", "SEPARATOR"), Map.entry("toolbar", "TOOLBAR"),
+            Map.entry("tree", "TREE"), Map.entry("treeitem", "TREEITEM"),
+            Map.entry("grid", "GRID"), Map.entry("gridcell", "GRIDCELL"),
+            Map.entry("paragraph", "PARAGRAPH"), Map.entry("contentinfo", "CONTENTINFO"),
+            Map.entry("complementary", "COMPLEMENTARY"), Map.entry("form", "FORM"),
+            Map.entry("article", "ARTICLE"), Map.entry("group", "GROUP"),
+            Map.entry("status", "STATUS"), Map.entry("tooltip", "TOOLTIP"),
+            Map.entry("option", "OPTION")
+    );
+
+    /**
+     * If the new selector is a Playwright {@code role=} or {@code text=} selector,
+     * rewrites the entire {@code obj.locator("old")} call to an idiomatic
+     * {@code obj.getByRole(AriaRole.X, ...)} or {@code obj.getByText("...")} call.
+     */
+    private String tryRewriteToPlaywrightGetBy(String line, String oldSelector, String newSelector) {
+        String getByCall = toGetByCall(newSelector);
+        if (getByCall == null) return null;
+
+        // Match obj.locator("oldSelector") — possibly with xpath= or css= prefix
+        Pattern p = Pattern.compile("(\\w+)\\s*\\.\\s*locator\\s*\\(\\s*[\"'](?:xpath=|css=)?" +
+                Pattern.quote(oldSelector) + "[\"']\\s*\\)");
+        Matcher m = p.matcher(line);
+        if (m.find()) {
+            String objName = m.group(1);
+            int end = consumeFilterChain(line, m.end());
+            return line.substring(0, m.start()) + objName + "." + getByCall + line.substring(end);
+        }
+
+        // Also match getByX(...) calls that contain the old selector value
+        // (for cases where the original was already a getBy call)
+        Pattern p2 = Pattern.compile("(\\w+)\\s*\\.\\s*(?:getBy\\w+|locator)\\s*\\(");
+        Matcher m2 = p2.matcher(line);
+        while (m2.find()) {
+            int openParen = m2.end() - 1;
+            int closeParen = findMatchingParen(line, openParen);
+            if (closeParen < 0) continue;
+            String args = line.substring(openParen + 1, closeParen);
+            if (containsQuoted(args, oldSelector)) {
+                String objName = m2.group(1);
+                int end = consumeFilterChain(line, closeParen + 1);
+                return line.substring(0, m2.start()) + objName + "." + getByCall + line.substring(end);
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Converts a Playwright selector engine string to an idiomatic Java getBy call.
+     * E.g. {@code role=button[name="Submit"]} → {@code getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Submit"))}
+     * E.g. {@code text=Hello} → {@code getByText("Hello")}
+     */
+    private String toGetByCall(String selector) {
+        if (selector == null) return null;
+        Matcher roleMatcher = ROLE_SELECTOR.matcher(selector.trim());
+        if (roleMatcher.matches()) {
+            String role = roleMatcher.group(1).toLowerCase();
+            String name = roleMatcher.group(2);
+            String ariaEnum = ARIA_ROLE_MAP.get(role);
+            if (ariaEnum == null) return null;
+            if (name != null && !name.isEmpty()) {
+                return "getByRole(AriaRole." + ariaEnum +
+                        ", new Page.GetByRoleOptions().setName(\"" + escapeForString(name) + "\"))";
+            }
+            return "getByRole(AriaRole." + ariaEnum + ")";
+        }
+        Matcher textMatcher = TEXT_SELECTOR.matcher(selector.trim());
+        if (textMatcher.matches()) {
+            String text = textMatcher.group(1);
+            return "getByText(\"" + escapeForString(text) + "\")";
+        }
+        return null;
     }
 
     // ── Selenium By.<type>: value handling ──────────────────────────────────

@@ -6,17 +6,61 @@ import java.util.List;
 import java.util.Map;
 
 public interface AIProvider {
-    AIResponse findLocator(String domSnapshot, String description, String originalSelector);
+
+    enum Framework { PLAYWRIGHT, SELENIUM }
+
+    AIResponse findLocator(String domSnapshot, String description, String originalSelector, Framework framework);
 
     /**
      * Batch heal: send DOM once, heal multiple locators in one AI call.
      * Each entry in locators is: key = originalSelector, value = description.
      * Returns a map of originalSelector -> AIResponse.
      */
-    Map<String, AIResponse> findLocatorsBatch(String domSnapshot, Map<String, String> locators);
+    Map<String, AIResponse> findLocatorsBatch(String domSnapshot, Map<String, String> locators, Framework framework);
 
     default FailureAnalysis analyzeFailure(FailureContext context) {
         throw new UnsupportedOperationException("This AI provider does not support failure analysis");
+    }
+
+    static String buildHealPrompt(String domSnapshot, String description, String originalSelector, Framework framework) {
+        return "A UI locator has broken and needs to be healed.\n\n" +
+                "Original selector: " + originalSelector + "\n" +
+                "Element description: " + description + "\n\n" +
+                "Current page DOM:\n```html\n" + domSnapshot + "\n```\n\n" +
+                selectorInstructions(framework) +
+                "Respond in this exact format (no markdown, no extra text):\n" +
+                "SELECTOR: <the selector>\n" +
+                "REASONING: <brief explanation>";
+    }
+
+    static String buildBatchHealPrompt(String domSnapshot, Map<String, String> locators, Framework framework) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("Multiple UI locators have broken and need to be healed.\n\n");
+        sb.append("Current page DOM:\n```html\n").append(domSnapshot).append("\n```\n\n");
+        sb.append("Broken locators:\n");
+        int i = 1;
+        for (Map.Entry<String, String> entry : locators.entrySet()) {
+            sb.append(i++).append(". Original: ").append(entry.getKey())
+              .append(" | Description: ").append(entry.getValue()).append("\n");
+        }
+        sb.append("\n").append(selectorInstructions(framework));
+        sb.append("Respond in this exact format for each (no markdown, no extra text):\n");
+        sb.append("ORIGINAL: <original selector>\nSELECTOR: <new selector>\nREASONING: <brief explanation>\n\n");
+        return sb.toString();
+    }
+
+    private static String selectorInstructions(Framework framework) {
+        if (framework == Framework.PLAYWRIGHT) {
+            return "Find the best Playwright-compatible selector for the described element.\n" +
+                    "Prefer Playwright's built-in selector engines in this priority order:\n" +
+                    "1. role= selectors with accessible name (e.g. role=button[name=\"Submit\"], role=heading[name=\"Title\"])\n" +
+                    "2. text= selectors for visible text (e.g. text=Hello World)\n" +
+                    "3. data-testid CSS selectors (e.g. [data-testid=\"my-id\"])\n" +
+                    "4. CSS selectors\n" +
+                    "5. XPath (only as last resort, prefix with xpath=)\n" +
+                    "The selector must be a string that works with page.locator(\"...\").\n\n";
+        }
+        return "Find the best CSS or XPath selector for the described element.\n\n";
     }
 
     static String buildFailureAnalysisPrompt(FailureContext context) {
