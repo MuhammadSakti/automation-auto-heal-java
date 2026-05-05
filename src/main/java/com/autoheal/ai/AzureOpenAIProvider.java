@@ -69,7 +69,7 @@ public class AzureOpenAIProvider implements AIProvider {
             String prompt = AIProvider.buildFailureAnalysisPrompt(context);
 
             ObjectNode body = mapper.createObjectNode();
-            body.put("max_tokens", 2048);
+            body.put("max_completion_tokens", 2048);
             ArrayNode messages = body.putArray("messages");
             ObjectNode sysMsg = messages.addObject();
             sysMsg.put("role", "system");
@@ -100,7 +100,7 @@ public class AzureOpenAIProvider implements AIProvider {
 
     private ObjectNode buildRequestBody(int maxTokens, String systemPrompt, String userPrompt) {
         ObjectNode body = mapper.createObjectNode();
-        body.put("max_tokens", maxTokens);
+        body.put("max_completion_tokens", maxTokens);
         ArrayNode messages = body.putArray("messages");
         ObjectNode sysMsg = messages.addObject();
         sysMsg.put("role", "system");
